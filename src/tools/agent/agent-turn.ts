@@ -63,10 +63,37 @@ export class AgentTurnTool extends BaseTool {
                 }
                 
                 const degrees = args.degrees || 90;
-                const turnAmount = args.direction === 'left' ? -degrees : degrees;
                 
-                // 相対回転: 現在の向きから指定度数回転
-                command = `tp @c ~ ~ ~ ~${turnAmount} ~`;
+                // agent turnコマンドを使用（90度単位での回転）
+                if (degrees === 90) {
+                    command = `agent turn ${args.direction}`;
+                } else {
+                    // 90度以外の場合は複数回実行
+                    const turnCount = Math.floor(degrees / 90);
+                    if (turnCount > 0) {
+                        const commands = [];
+                        for (let i = 0; i < turnCount; i++) {
+                            commands.push(`agent turn ${args.direction}`);
+                        }
+                        const batchResult = await this.executeBatch(commands);
+                        return {
+                            success: batchResult.success,
+                            message: batchResult.success ? 
+                                `Agent turned ${args.direction} ${degrees} degrees` : 
+                                batchResult.message,
+                            data: {
+                                type: args.type,
+                                direction: args.direction,
+                                degrees: degrees
+                            }
+                        };
+                    } else {
+                        return {
+                            success: false,
+                            message: 'Degrees must be at least 90 (agent can only turn in 90-degree increments)'
+                        };
+                    }
+                }
                 
             } else if (args.type === 'absolute') {
                 if (args.yaw === undefined) {

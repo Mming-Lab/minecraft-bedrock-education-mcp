@@ -2,11 +2,12 @@ import { BaseTool } from '../base/tool';
 import { ToolCallResult, InputSchema } from '../../types';
 
 /**
- * プレイヤーの位置情報を取得するツール
+ * プレイヤーの頭部位置情報を取得するツール
+ * 注意: 取得される座標はプレイヤーの頭部（目線）の位置です
  */
 export class PlayerPositionTool extends BaseTool {
     readonly name = 'player_position';
-    readonly description = 'Get the current position and rotation of the player using WebSocket QueryTarget command';
+    readonly description = 'Get the current head position and rotation of the player using WebSocket QueryTarget command. The position coordinates represent the player\'s head/eye level position, not the feet position.';
     readonly inputSchema: InputSchema = {
         type: 'object',
         properties: {},
@@ -15,8 +16,9 @@ export class PlayerPositionTool extends BaseTool {
 
     async execute(args: {}): Promise<ToolCallResult> {
         try {
-            // QueryTargetコマンドを使用してプレイヤー位置を取得
+            // QueryTargetコマンドを使用してプレイヤーの頭部位置を取得
             // WebSocket専用機能：プレイヤー情報の詳細取得
+            // 注意: 返される座標はプレイヤーの頭部（目線レベル）の位置
             const result = await this.executeCommand('querytarget @s');
             
             if (result.success && result.data) {
@@ -37,13 +39,14 @@ export class PlayerPositionTool extends BaseTool {
                             
                             return {
                                 success: true,
-                                message: `Player position: X=${x.toFixed(2)}, Y=${y.toFixed(2)}, Z=${z.toFixed(2)}, Rotation: ${yRot.toFixed(1)}°, Dimension: ${dimension}`,
+                                message: `Player head position: X=${x.toFixed(2)}, Y=${y.toFixed(2)}, Z=${z.toFixed(2)}, Rotation: ${yRot.toFixed(1)}°, Dimension: ${dimension}`,
                                 data: {
                                     position: { x, y, z },
                                     rotation: { yaw: yRot },
                                     dimension: dimension,
                                     uniqueId: player.uniqueId,
-                                    command: 'querytarget @s'
+                                    command: 'querytarget @s',
+                                    note: 'Position coordinates represent head/eye level, not feet position'
                                 }
                             };
                         }
@@ -72,7 +75,7 @@ export class PlayerPositionTool extends BaseTool {
         } catch (error) {
             return {
                 success: false,
-                message: `Error getting player position: ${error instanceof Error ? error.message : String(error)}`
+                message: `Error getting player head position: ${error instanceof Error ? error.message : String(error)}`
             };
         }
     }

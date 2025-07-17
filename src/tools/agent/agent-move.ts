@@ -63,17 +63,29 @@ export class AgentMoveTool extends BaseTool {
                 }
                 
                 const distance = args.distance || 1;
-                const directionMap = {
-                    forward: `~0 ~0 ~${distance}`,
-                    back: `~0 ~0 ~-${distance}`,
-                    left: `~-${distance} ~0 ~0`,
-                    right: `~${distance} ~0 ~0`,
-                    up: `~0 ~${distance} ~0`,
-                    down: `~0 ~-${distance} ~0`
-                };
                 
-                const coords = directionMap[args.direction as keyof typeof directionMap];
-                command = `tp @c ${coords}`;
+                // agent moveコマンドを使用（複数回実行で距離を制御）
+                if (distance === 1) {
+                    command = `agent move ${args.direction}`;
+                } else {
+                    // 複数回実行する場合はbatchを使用
+                    const commands = [];
+                    for (let i = 0; i < distance; i++) {
+                        commands.push(`agent move ${args.direction}`);
+                    }
+                    const batchResult = await this.executeBatch(commands);
+                    return {
+                        success: batchResult.success,
+                        message: batchResult.success ? 
+                            `Agent moved ${distance} blocks ${args.direction}` : 
+                            batchResult.message,
+                        data: {
+                            type: args.type,
+                            direction: args.direction,
+                            distance: distance
+                        }
+                    };
+                }
                 
             } else if (args.type === 'coordinates') {
                 if (args.x === undefined || args.y === undefined || args.z === undefined) {

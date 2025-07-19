@@ -6,7 +6,7 @@ A TypeScript-based MCP (Model Context Protocol) server that provides tools for c
 
 ## 🎮 Features
 
-- **15 Powerful Tools** organized in a hierarchical system
+- **13 Powerful Tools** organized in a hierarchical system
 - **Level 1 Basic Tools**: Player control, Agent (@c) operations, World manipulation
 - **Level 2 Advanced Tools**: Complex building operations, advanced world management
 - **MCP Client Integration** (e.g., Claude Desktop) for AI-powered Minecraft automation
@@ -20,10 +20,10 @@ A TypeScript-based MCP (Model Context Protocol) server that provides tools for c
 - `player_say` - Send messages as player
 
 ### Agent Control (Education Edition)
-- `agent_move` - Move agent in directions or to coordinates
-- `agent_turn` - Turn agent left/right or set specific rotation
-- `agent_attack` - Make agent attack in specific direction
-- `agent_block_action` - Agent block operations (place, destroy, till)
+- `agent_move` - Move agent in directions or to coordinates ✅
+- `agent_turn` - Turn agent left/right or set specific rotation ✅
+- ~~`agent_attack`~~ - ❌ Not supported in Bedrock Edition
+- ~~`agent_block_action`~~ - ❌ Not supported in Bedrock Edition
 
 ### World Operations
 - `world_block` - World block operations (set, get, destroy)

@@ -6,7 +6,7 @@ WebSocket接続を通じてMinecraft Bedrock Editionを制御するツールを�
 
 ## 🎮 機能
 
-- **15の強力なツール**を階層化システムで構成
+- **13の強力なツール**を階層化システムで構成
 - **レベル1基本ツール**: プレイヤー制御、エージェント（@c）操作、ワールド操作
 - **レベル2高度ツール**: 複雑な建築操作、高度なワールド管理
 - **MCPクライアント統合**（例：Claude Desktop）によるAI駆動のMinecraft自動化
@@ -20,10 +20,10 @@ WebSocket接続を通じてMinecraft Bedrock Editionを制御するツールを�
 - `player_say` - プレイヤーとしてメッセージを送信
 
 ### エージェント制御（Education Edition）
-- `agent_move` - エージェントを方向または座標に移動
-- `agent_turn` - エージェントを左右に回転または特定方向に設定
-- `agent_attack` - エージェントが特定方向を攻撃
-- `agent_block_action` - エージェントのブロック操作（設置、破壊、耕す）
+- `agent_move` - エージェントを方向または座標に移動 ✅
+- `agent_turn` - エージェントを左右に回転または特定方向に設定 ✅
+- ~~`agent_attack`~~ - ❌ Bedrock Editionでは未対応
+- ~~`agent_block_action`~~ - ❌ Bedrock Editionでは未対応
 
 ### ワールド操作
 - `world_block` - ワールドのブロック操作（設置、取得、破壊）

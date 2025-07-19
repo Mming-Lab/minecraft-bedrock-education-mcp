@@ -18,8 +18,8 @@ import { PlayerMoveTool } from './tools/player/player-move';
 import { PlayerSayTool } from './tools/player/player-say';
 import { AgentMoveTool } from './tools/agent/agent-move';
 import { AgentTurnTool } from './tools/agent/agent-turn';
-import { AgentAttackTool } from './tools/agent/agent-attack';
-import { AgentBlockActionTool } from './tools/agent/agent-block-action';
+// import { AgentAttackTool } from './tools/agent/agent-attack';
+// import { AgentBlockActionTool } from './tools/agent/agent-block-action';
 import { WorldBlockTool } from './tools/world/world-block';
 
 // レベル2: 複合操作ツール
@@ -184,8 +184,8 @@ export class MinecraftMCPServer {
             new PlayerSayTool(),
             new AgentMoveTool(),
             new AgentTurnTool(),
-            new AgentAttackTool(),
-            new AgentBlockActionTool(),
+            // new AgentAttackTool(),     // エージェントでは使用不可
+            // new AgentBlockActionTool(), // エージェントでは使用不可
             new WorldBlockTool(),
             
             // レベル2: 複合操作ツール

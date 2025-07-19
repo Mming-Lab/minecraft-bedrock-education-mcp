@@ -2,12 +2,13 @@ import { BaseTool } from '../base/tool';
 import { ToolCallResult, InputSchema } from '../../types';
 
 /**
- * プレイヤーの頭部位置情報を取得するツール
- * 注意: 取得される座標はプレイヤーの頭部（目線）の位置です
+ * プレイヤーの足元位置情報を取得するツール
+ * 内部的にはQueryTargetで頭部座標を取得し、足元座標（Y-1.62）に変換して返します
+ * 回転角度は一般的なコンパス表記（北=0°）に変換して返します
  */
 export class PlayerPositionTool extends BaseTool {
     readonly name = 'player_position';
-    readonly description = 'Get the current head position and rotation of the player using WebSocket QueryTarget command. The position coordinates represent the player\'s head/eye level position, not the feet position.';
+    readonly description = 'Get the current position and rotation of the player using WebSocket QueryTarget command. Returns the player\'s feet position coordinates (converted from head position by subtracting 1.62 blocks from Y coordinate). Rotation is converted to standard compass bearing (North=0°, East=90°, South=180°, West=270°).';
     readonly inputSchema: InputSchema = {
         type: 'object',
         properties: {},
@@ -18,7 +19,7 @@ export class PlayerPositionTool extends BaseTool {
         try {
             // QueryTargetコマンドを使用してプレイヤーの頭部位置を取得
             // WebSocket専用機能：プレイヤー情報の詳細取得
-            // 注意: 返される座標はプレイヤーの頭部（目線レベル）の位置
+            // 注意: QueryTargetで取得される座標は頭部位置のため、足元座標に変換する
             const result = await this.executeCommand('querytarget @s');
             
             if (result.success && result.data) {
@@ -37,16 +38,28 @@ export class PlayerPositionTool extends BaseTool {
                             const yRot = player.yRot || 0;
                             const dimension = player.dimension || 0;
                             
+                            // 頭部座標から足元座標に変換（Y座標から1.62ブロック減算）
+                            const feetY = y - 1.62;
+                            
+                            // Minecraftの角度を一般的なコンパス角度に変換
+                            // Minecraft: 南=0°, 西=90°, 北=180°/-180°, 東=-90°/270°
+                            // 一般的: 北=0°, 東=90°, 南=180°, 西=270°
+                            const minecraftYaw = yRot;
+                            const compassBearing = (90 - minecraftYaw + 360) % 360;
+                            
                             return {
                                 success: true,
-                                message: `Player head position: X=${x.toFixed(2)}, Y=${y.toFixed(2)}, Z=${z.toFixed(2)}, Rotation: ${yRot.toFixed(1)}°, Dimension: ${dimension}`,
+                                message: `Player position: X=${x.toFixed(2)}, Y=${feetY.toFixed(2)}, Z=${z.toFixed(2)}, Bearing: ${compassBearing.toFixed(1)}°, Dimension: ${dimension}`,
                                 data: {
-                                    position: { x, y, z },
-                                    rotation: { yaw: yRot },
+                                    position: { x, y: feetY, z },
+                                    rotation: { 
+                                        bearing: compassBearing,
+                                        minecraftYaw: minecraftYaw
+                                    },
                                     dimension: dimension,
                                     uniqueId: player.uniqueId,
                                     command: 'querytarget @s',
-                                    note: 'Position coordinates represent head/eye level, not feet position'
+                                    note: 'Position coordinates represent feet position (converted from head position). Bearing uses standard compass notation (N=0°, E=90°, S=180°, W=270°).'
                                 }
                             };
                         }
@@ -79,4 +92,5 @@ export class PlayerPositionTool extends BaseTool {
             };
         }
     }
+    
 }

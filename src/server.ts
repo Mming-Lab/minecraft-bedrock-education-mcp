@@ -26,6 +26,14 @@ import { WorldBlockTool } from './tools/world/world-block';
 import { BuildCubeTool } from './tools/build/build-cube';
 import { BuildLineTool } from './tools/build/build-line';
 import { BuildSphereTool } from './tools/build/build-sphere';
+import { BuildParaboloidTool } from './tools/build/build-paraboloid';
+import { BuildHyperboloidTool } from './tools/build/build-hyperboloid';
+import { BuildCylinderTool } from './tools/build/build-cylinder';
+import { BuildTorusTool } from './tools/build/build-torus';
+import { BuildHelixTool } from './tools/build/build-helix';
+import { BuildEllipsoidTool } from './tools/build/build-ellipsoid';
+import { BuildRotateTool } from './tools/build/build-rotate';
+import { BuildTransformTool } from './tools/build/build-transform';
 import { WorldFillTool } from './tools/world/world-fill';
 import { WorldTimeWeatherTool } from './tools/world/world-time-weather';
 
@@ -192,6 +200,14 @@ export class MinecraftMCPServer {
             new BuildCubeTool(),
             new BuildLineTool(),
             new BuildSphereTool(),
+            new BuildParaboloidTool(),
+            new BuildHyperboloidTool(),
+            new BuildCylinderTool(),
+            new BuildTorusTool(),
+            new BuildHelixTool(),
+            new BuildEllipsoidTool(),
+            new BuildRotateTool(),
+            new BuildTransformTool(),
             new WorldFillTool(),
             new WorldTimeWeatherTool()
         ];
@@ -604,6 +620,24 @@ export class MinecraftMCPServer {
             case 'tools/call':
                 return await this.handleToolCall(request);
                 
+            case 'resources/list':
+                return {
+                    jsonrpc: '2.0',
+                    id: request.id,
+                    result: {
+                        resources: []
+                    }
+                };
+                
+            case 'prompts/list':
+                return {
+                    jsonrpc: '2.0',
+                    id: request.id,
+                    result: {
+                        prompts: []
+                    }
+                };
+                
             default:
                 return {
                     jsonrpc: '2.0',
@@ -617,13 +651,13 @@ export class MinecraftMCPServer {
         const basicTools: Tool[] = [
             {
                 name: 'send_message',
-                description: 'Send a message to the connected Minecraft player',
+                description: 'Send a chat message to the connected Minecraft player. ALWAYS provide a message parameter. Use this to communicate with the player about build progress or instructions.',
                 inputSchema: {
                     type: 'object',
                     properties: {
                         message: {
                             type: 'string',
-                            description: 'The message to send to the player'
+                            description: 'The text message to send to the player (REQUIRED - never call this without a message)'
                         }
                     },
                     required: ['message']
@@ -656,13 +690,39 @@ export class MinecraftMCPServer {
     }
     
     private async handleToolCall(request: MCPRequest): Promise<MCPResponse> {
-        const { name: toolName, arguments: args } = request.params;
+        try {
+            // パラメータ構造の確認とデバッグ
+            console.error('Tool call params:', JSON.stringify(request.params, null, 2));
+            
+            const toolName = request.params?.name;
+            const args = request.params?.arguments || request.params?.args || {};
+            
+            console.error('Extracted toolName:', toolName);
+            console.error('Extracted args:', JSON.stringify(args, null, 2));
+            
+            if (!toolName) {
+                return {
+                    jsonrpc: '2.0',
+                    id: request.id,
+                    error: { code: -32602, message: 'Missing tool name' }
+                };
+            }
+
+            let result: ToolCallResult;
         
-        let result: ToolCallResult;
-        
-        // 基本ツールの処理
-        if (toolName === 'send_message') {
-            result = this.sendMessage(args.message);
+            // 基本ツールの処理
+            if (toolName === 'send_message') {
+                // メッセージパラメータの処理
+                const message = args.message || args.text || 'Hello from MCP server!';
+                
+                if (!message || message.trim() === '') {
+                    return {
+                        jsonrpc: '2.0',
+                        id: request.id,
+                        error: { code: -32602, message: 'Message parameter is required and cannot be empty' }
+                    };
+                }
+                result = this.sendMessage(message);
         } else if (toolName === 'execute_command') {
             result = await this.executeCommand(args.command);
         } else {
@@ -698,16 +758,26 @@ export class MinecraftMCPServer {
             };
         }
         
-        return {
-            jsonrpc: '2.0',
-            id: request.id,
-            result: {
-                content: [{
-                    type: 'text',
-                    text: result.message || `Tool ${toolName} executed successfully`
-                }]
-            }
-        };
+            return {
+                jsonrpc: '2.0',
+                id: request.id,
+                result: {
+                    content: [{
+                        type: 'text',
+                        text: result.message || `Tool ${toolName} executed successfully`
+                    }]
+                }
+            };
+        } catch (error) {
+            return {
+                jsonrpc: '2.0',
+                id: request.id,
+                error: { 
+                    code: -32603, 
+                    message: `Tool call handler error: ${error instanceof Error ? error.message : String(error)}` 
+                }
+            };
+        }
     }
 }
 

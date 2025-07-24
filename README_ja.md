@@ -6,7 +6,7 @@ WebSocket接続を通じてMinecraft Bedrock Editionを制御するツールを�
 
 ## 🎮 機能
 
-- **13の強力なツール**を階層化システムで構成
+- **20以上の強力なツール**を階層化システムで構成
 - **レベル1基本ツール**: プレイヤー制御、エージェント（@c）操作、ワールド操作
 - **レベル2高度ツール**: 複雑な建築操作、高度なワールド管理
 - **MCPクライアント統合**（例：Claude Desktop）によるAI駆動のMinecraft自動化
@@ -34,6 +34,14 @@ WebSocket接続を通じてMinecraft Bedrock Editionを制御するツールを�
 - `build_cube` - 立体または中空の立方体を建築
 - `build_line` - 点間に直線を建築
 - `build_sphere` - 立体または中空の球体を建築
+- `build_paraboloid` - パラボロイド形状（衛星皿状）を建築
+- `build_hyperboloid` - ハイパーボロイド形状（冷却塔状）を建築
+- `build_cylinder` - 円柱構造を建築
+- `build_torus` - トーラス/ドーナツ形状を建築
+- `build_helix` - らせん/スパイラル構造を建築
+- `build_ellipsoid` - 楕円体形状を建築
+- `build_rotate` - 既存構造を回転
+- `build_transform` - 構造を変形・操作
 
 ### 基本コミュニケーション
 - `send_message` - チャットメッセージを送信

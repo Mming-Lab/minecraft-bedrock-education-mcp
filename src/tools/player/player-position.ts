@@ -8,10 +8,12 @@ import { ToolCallResult, InputSchema } from '../../types';
  */
 export class PlayerPositionTool extends BaseTool {
     readonly name = 'player_position';
-    readonly description = 'Get the current position and rotation of the player using WebSocket QueryTarget command. Returns the player\'s feet position coordinates (converted from head position by subtracting 1.62 blocks from Y coordinate). Rotation is converted to standard compass bearing (North=0°, East=90°, South=180°, West=270°).';
+    readonly description = 'Get the precise 3D position and compass orientation of the player in the Minecraft world. Perfect for navigation, teleportation planning, and location-based commands. Returns feet position coordinates (e.g., X=125.45, Y=64.00, Z=-89.12) and compass bearing in degrees (North=0°, East=90°, South=180°, West=270°). Essential for coordinate-based operations and spatial awareness.'
     readonly inputSchema: InputSchema = {
         type: 'object',
-        properties: {},
+        properties: {
+            // No parameters required - simply returns current player location and orientation
+        },
         required: []
     };
 

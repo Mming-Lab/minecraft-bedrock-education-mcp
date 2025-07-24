@@ -37,7 +37,7 @@ import { ToolCallResult, InputSchema } from '../../types';
  */
 export class BuildCubeTool extends BaseTool {
     readonly name = 'build_cube';
-    readonly description = 'Build a cube structure with specified dimensions and material';
+    readonly description = 'Build a CUBE/RECTANGLE (box shape). USE THIS when user asks for: "box", "rectangle", "square building", "wall", "platform", "room", "house frame". NOT for round shapes. ALWAYS specify: x1, y1, z1, x2, y2, z2. Example: x1=0, y1=64, z1=0, x2=10, y2=74, z2=10';
     readonly inputSchema: InputSchema = {
         type: 'object',
         properties: {

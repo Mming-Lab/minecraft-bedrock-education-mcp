@@ -6,48 +6,48 @@ import { ToolCallResult, InputSchema } from '../../types';
  */
 export class WorldFillTool extends BaseTool {
     readonly name = 'world_fill';
-    readonly description = 'Fill a region with blocks, with advanced options';
+    readonly description = 'Fill large 3D regions with blocks using advanced fill modes for efficient large-scale construction. Perfect for building foundations, clearing areas, creating structures, or mass terrain modification. Supports multiple fill modes: replace specific blocks, destroy existing blocks, keep only empty spaces, or create hollow outlines. Essential for megabuilds, landscaping, and rapid construction. Maximum volume: 32,768 blocks per operation.'
     readonly inputSchema: InputSchema = {
         type: 'object',
         properties: {
             x1: {
                 type: 'number',
-                description: 'Starting X coordinate'
+                description: 'Starting corner X coordinate (East/West). Defines one corner of the fill region. Example: x1=50 for the western edge at X=50'
             },
             y1: {
                 type: 'number',
-                description: 'Starting Y coordinate'
+                description: 'Starting corner Y coordinate (height). Range: -64 to 320. Defines bottom of fill region. Example: y1=60 for ground level'
             },
             z1: {
                 type: 'number',
-                description: 'Starting Z coordinate'
+                description: 'Starting corner Z coordinate (North/South). Defines one corner of the fill region. Example: z1=100 for the northern edge at Z=100'
             },
             x2: {
                 type: 'number',
-                description: 'Ending X coordinate'
+                description: 'Ending corner X coordinate (East/West). Defines opposite corner from x1. Example: x2=100 creates a 50-block wide region if x1=50'
             },
             y2: {
                 type: 'number',
-                description: 'Ending Y coordinate'
+                description: 'Ending corner Y coordinate (height). Range: -64 to 320. Defines top of fill region. Example: y2=80 creates a 20-block tall region if y1=60'
             },
             z2: {
                 type: 'number',
-                description: 'Ending Z coordinate'
+                description: 'Ending corner Z coordinate (North/South). Defines opposite corner from z1. Example: z2=150 creates a 50-block deep region if z1=100'
             },
             block: {
                 type: 'string',
-                description: 'Block type to fill with',
+                description: 'Block type to fill the region with. Use Minecraft block IDs like "concrete", "wood", "glass", or full IDs like "minecraft:gold_block". Example: "white_concrete" for clean building material.',
                 default: 'minecraft:stone'
             },
             mode: {
                 type: 'string',
-                description: 'Fill mode',
+                description: 'Fill behavior: "replace" swaps specific blocks, "destroy" breaks existing blocks, "keep" only fills air spaces, "outline" creates hollow shell',
                 enum: ['replace', 'destroy', 'keep', 'outline'],
                 default: 'replace'
             },
             replaceBlock: {
                 type: 'string',
-                description: 'Block to replace (when mode=replace)',
+                description: 'Specific block type to replace when mode=replace. Only blocks of this type will be changed to the new block. Example: "dirt" replaces only dirt blocks with the target block.',
                 default: 'minecraft:air'
             }
         },

@@ -6,37 +6,37 @@ import { ToolCallResult, InputSchema } from '../../types';
  */
 export class BuildLineTool extends BaseTool {
     readonly name = 'build_line';
-    readonly description = 'Build a straight line of blocks between two points';
+    readonly description = 'Build a straight line of blocks between two points. Perfect for paths, roads, fences, bridges, pillars, or structural frameworks. Example: from (0,64,0) to (10,80,10) creates a diagonal line useful for building supports or artistic structures';
     readonly inputSchema: InputSchema = {
         type: 'object',
         properties: {
             x1: {
                 type: 'number',
-                description: 'Starting X coordinate'
+                description: 'Starting X coordinate (east-west position where line begins)'
             },
             y1: {
                 type: 'number',
-                description: 'Starting Y coordinate'
+                description: 'Starting Y coordinate (height where line begins, typically 64 for ground level)'
             },
             z1: {
                 type: 'number',
-                description: 'Starting Z coordinate'
+                description: 'Starting Z coordinate (north-south position where line begins)'
             },
             x2: {
                 type: 'number',
-                description: 'Ending X coordinate'
+                description: 'Ending X coordinate (east-west position where line ends)'
             },
             y2: {
                 type: 'number',
-                description: 'Ending Y coordinate'
+                description: 'Ending Y coordinate (height where line ends, can be different for slopes/ramps)'
             },
             z2: {
                 type: 'number',
-                description: 'Ending Z coordinate'
+                description: 'Ending Z coordinate (north-south position where line ends)'
             },
             material: {
                 type: 'string',
-                description: 'Block material to use',
+                description: 'Block type to build the line with (e.g. stone, cobblestone, wood, concrete)',
                 default: 'minecraft:stone'
             }
         },

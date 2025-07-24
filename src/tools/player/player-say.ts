@@ -6,17 +6,17 @@ import { ToolCallResult, InputSchema } from '../../types';
  */
 export class PlayerSayTool extends BaseTool {
     readonly name = 'player_say';
-    readonly description = 'Send a message as the player to all players in the world';
+    readonly description = 'Send chat messages as the player to communicate with other players or leave notes. Perfect for multiplayer coordination, status updates, or documenting activities. Supports both public messages visible to all players and private messages to specific players. Messages appear in chat with the player\'s name, making it ideal for roleplay or collaborative building.'
     readonly inputSchema: InputSchema = {
         type: 'object',
         properties: {
             message: {
                 type: 'string',
-                description: 'The message to send'
+                description: 'The text message to send in chat. Can be any text - coordinates, instructions, greetings, or status updates. Example: "Building complete at X=100 Z=200" or "Hello everyone!"'
             },
             target: {
                 type: 'string',
-                description: 'Target player for private message (optional)',
+                description: 'Target recipient for the message. Use "all" for public message visible to everyone, or specify a player name (e.g., "Steve") for private message. Private messages only the specified player can see.',
                 default: 'all'
             }
         },

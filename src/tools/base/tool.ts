@@ -143,31 +143,63 @@ export abstract class BaseTool implements Tool {
     protected async executeBatch(commands: string[], stopOnError: boolean = true): Promise<ToolCallResult> {
         const results: any[] = [];
         let hasError = false;
-
-        for (const [index, command] of commands.entries()) {
-            const result = await this.executeCommand(command);
+        const totalCommands = commands.length;
+        const batchSize = 50; // バッチサイズを小分け
+        
+        // 大量コマンドの場合は進捗報告
+        const shouldReportProgress = totalCommands > 100;
+        
+        for (let batchStart = 0; batchStart < totalCommands; batchStart += batchSize) {
+            const batchEnd = Math.min(batchStart + batchSize, totalCommands);
+            const currentBatch = commands.slice(batchStart, batchEnd);
             
-            if (!result.success) {
-                hasError = true;
+            // 進捗報告
+            if (shouldReportProgress && batchStart > 0) {
+                const progress = Math.round((batchStart / totalCommands) * 100);
+                console.error(`Building progress: ${progress}% (${batchStart}/${totalCommands} blocks)`);
+            }
+            
+            // バッチ内のコマンドを実行
+            for (const [localIndex, command] of currentBatch.entries()) {
+                const globalIndex = batchStart + localIndex;
+                const result = await this.executeCommand(command);
                 
-                if (stopOnError) {
-                    return { 
-                        success: false, 
-                        message: `Batch execution failed at command ${index + 1}: ${result.message}` 
-                    };
+                if (!result.success) {
+                    hasError = true;
+                    
+                    if (stopOnError) {
+                        return { 
+                            success: false, 
+                            message: `Batch execution failed at command ${globalIndex + 1}: ${result.message}` 
+                        };
+                    }
+                }
+                
+                results.push(result);
+                
+                // 適度な間隔で処理を分散（サーバー負荷軽減）
+                if ((globalIndex + 1) % 10 === 0) {
+                    await new Promise(resolve => setTimeout(resolve, 5));
                 }
             }
             
-            results.push(result);
+            // バッチ間で少し待機（サーバー安定化）
+            if (batchEnd < totalCommands) {
+                await new Promise(resolve => setTimeout(resolve, 20));
+            }
         }
+        
+        const successful = results.filter(r => r.success).length;
+        const failed = results.filter(r => !r.success).length;
 
         return {
             success: !hasError,
-            message: `Batch execution completed. Successful: ${results.filter(r => r.success).length}, Failed: ${results.filter(r => !r.success).length}`,
+            message: `Batch execution completed. Successful: ${successful}, Failed: ${failed}`,
             data: {
                 results,
-                successful: results.filter(r => r.success).length,
-                failed: results.filter(r => !r.success).length
+                successful,
+                failed,
+                totalCommands
             }
         };
     }

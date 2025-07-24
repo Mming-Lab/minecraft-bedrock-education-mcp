@@ -6,23 +6,23 @@ import { ToolCallResult, InputSchema } from '../../types';
  */
 export class AgentBlockActionTool extends BaseTool {
     readonly name = 'agent_block_action';
-    readonly description = 'Make the agent place, destroy, or till blocks';
+    readonly description = '⚠️ BEDROCK LIMITATION: Agent block manipulation commands are limited in Bedrock Edition. This tool simulates agent block actions using setblock commands executed at positions relative to the agent. Perfect for automated building, farming, or terrain modification. Supports placing blocks, destroying blocks, and tilling soil for farming. Note: This uses workaround implementation since native agent block commands are not fully supported in Bedrock Edition.'
     readonly inputSchema: InputSchema = {
         type: 'object',
         properties: {
             action: {
                 type: 'string',
-                description: 'Action to perform',
+                description: 'Block operation type: "place" sets a block, "destroy" removes a block (with drops), "till" converts dirt/grass to farmland for crops',
                 enum: ['place', 'destroy', 'till']
             },
             direction: {
                 type: 'string',
-                description: 'Direction relative to agent',
+                description: 'Direction relative to agent position where the action occurs. "forward" affects the block in front of the agent, "down" affects the block below, etc. Essential for precise block placement.',
                 enum: ['forward', 'back', 'left', 'right', 'up', 'down']
             },
             block: {
                 type: 'string',
-                description: 'Block type to place (when action=place)',
+                description: 'Block type to place when action=place. Use Minecraft block IDs like "stone", "dirt", "oak_planks", or full IDs like "minecraft:cobblestone". Example: "wool" places white wool block.',
                 default: 'minecraft:stone'
             }
         },

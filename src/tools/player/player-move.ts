@@ -6,25 +6,25 @@ import { ToolCallResult, InputSchema } from '../../types';
  */
 export class PlayerMoveTool extends BaseTool {
     readonly name = 'player_move';
-    readonly description = 'Move or teleport the player to a specific location';
+    readonly description = 'Instantly teleport the player to any location in the Minecraft world using absolute or relative coordinates. Perfect for fast travel, escaping danger, reaching build sites, or positioning for screenshots. Supports both absolute coordinates (e.g., X=100, Y=70, Z=200) and relative movement (e.g., move 5 blocks forward from current position). Essential for efficient world navigation.'
     readonly inputSchema: InputSchema = {
         type: 'object',
         properties: {
             x: {
                 type: 'number',
-                description: 'Target X coordinate'
+                description: 'Target X coordinate (East/West axis). Positive values go East, negative go West. Example: 100 for coordinates X=100'
             },
             y: {
                 type: 'number',
-                description: 'Target Y coordinate'
+                description: 'Target Y coordinate (height/elevation). Range: -64 to 320. Sea level is Y=63. Example: 70 for a safe height above ground'
             },
             z: {
                 type: 'number',
-                description: 'Target Z coordinate'
+                description: 'Target Z coordinate (North/South axis). Positive values go South, negative go North. Example: -50 for coordinates Z=-50'
             },
             relative: {
                 type: 'boolean',
-                description: 'Use relative coordinates (default: false)',
+                description: 'Use relative movement from current position instead of absolute coordinates. When true, X=5 means "move 5 blocks East from here". Perfect for small adjustments like "move up 10 blocks" or "step back 3 blocks"',
                 default: false
             }
         },

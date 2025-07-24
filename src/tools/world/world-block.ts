@@ -6,30 +6,30 @@ import { ToolCallResult, InputSchema } from '../../types';
  */
 export class WorldBlockTool extends BaseTool {
     readonly name = 'world_block';
-    readonly description = 'Perform block operations in the world (set, get, destroy)';
+    readonly description = 'Perform precise single-block operations at any world coordinates. Perfect for detailed building, targeted modifications, or block analysis. Supports setting blocks at specific locations, checking what block exists at coordinates, and destroying blocks with item drops. Essential for fine-grained world editing and construction projects. Works with any valid Minecraft block type and coordinates within world bounds (-64 to 320 Y).'
     readonly inputSchema: InputSchema = {
         type: 'object',
         properties: {
             action: {
                 type: 'string',
-                description: 'Action to perform',
+                description: 'Block operation type: "set" places a block, "get" checks what block exists at coordinates, "destroy" removes block with item drops',
                 enum: ['set', 'get', 'destroy']
             },
             x: {
                 type: 'number',
-                description: 'X coordinate'
+                description: 'Target X coordinate (East/West axis). Positive values are East, negative are West. Example: 150 targets the block at X=150'
             },
             y: {
                 type: 'number',
-                description: 'Y coordinate'
+                description: 'Target Y coordinate (height/elevation). Valid range: -64 to 320. Sea level is Y=63. Example: 70 targets a block at height 70'
             },
             z: {
                 type: 'number',
-                description: 'Z coordinate'
+                description: 'Target Z coordinate (North/South axis). Positive values are South, negative are North. Example: -100 targets the block at Z=-100'
             },
             block: {
                 type: 'string',
-                description: 'Block type (when action=set)',
+                description: 'Block type to place when action=set. Use Minecraft block IDs like "stone", "glass", "oak_log", or full IDs like "minecraft:diamond_block". Example: "emerald_block" places an emerald block.',
                 default: 'minecraft:stone'
             }
         },

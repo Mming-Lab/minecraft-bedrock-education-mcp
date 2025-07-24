@@ -6,18 +6,18 @@ import { ToolCallResult, InputSchema } from '../../types';
  */
 export class AgentAttackTool extends BaseTool {
     readonly name = 'agent_attack';
-    readonly description = 'Make the agent attack in a specific direction';
+    readonly description = '⚠️ BEDROCK LIMITATION: Agent attack functionality is limited in Bedrock Edition. This tool simulates attacks by breaking blocks in the specified direction using setblock commands. Perfect for automated mining, clearing obstacles, or resource gathering. Works by destroying blocks adjacent to the agent position. Note: This is a workaround implementation since native agent attack commands are not fully supported in Bedrock Edition.'
     readonly inputSchema: InputSchema = {
         type: 'object',
         properties: {
             direction: {
                 type: 'string',
-                description: 'Direction to attack',
+                description: 'Direction to attack/break blocks relative to agent position. "forward" breaks the block the agent is facing, "up" breaks above, etc. Perfect for clearing paths or mining operations.',
                 enum: ['forward', 'back', 'left', 'right', 'up', 'down']
             },
             times: {
                 type: 'number',
-                description: 'Number of times to attack (default: 1)',
+                description: 'Number of attack attempts (blocks to break) in the specified direction. Example: times=3 breaks 3 blocks in sequence. Useful for creating tunnels or clearings.',
                 minimum: 1,
                 maximum: 10,
                 default: 1

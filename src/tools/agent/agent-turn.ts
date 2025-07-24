@@ -6,36 +6,36 @@ import { ToolCallResult, InputSchema } from '../../types';
  */
 export class AgentTurnTool extends BaseTool {
     readonly name = 'agent_turn';
-    readonly description = 'Turn the agent left or right, or set specific rotation';
+    readonly description = 'Control the agent\'s facing direction with precise rotation control. Perfect for orienting the agent before movement, aligning with building patterns, or pointing toward specific targets. Supports both relative turns (left/right in 90-degree increments) and absolute rotation angles. Essential for directional agent automation and precise orientation tasks. Note: Agent must be spawned first using /summon agent.'
     readonly inputSchema: InputSchema = {
         type: 'object',
         properties: {
             type: {
                 type: 'string',
-                description: 'Turn type: relative or absolute',
+                description: 'Rotation method: "relative" for turning left/right from current facing, "absolute" for setting exact yaw/pitch angles in degrees',
                 enum: ['relative', 'absolute']
             },
             direction: {
                 type: 'string',
-                description: 'Direction to turn (when type=relative)',
+                description: 'Turn direction relative to current facing. "left" rotates counterclockwise, "right" rotates clockwise. Perfect for systematic scanning or positioning sequences.',
                 enum: ['left', 'right']
             },
             degrees: {
                 type: 'number',
-                description: 'Degrees to turn (when type=relative, default: 90)',
+                description: 'Rotation amount in degrees. Agent turns in 90-degree increments, so use multiples of 90 (90, 180, 270). Example: 180 makes agent face opposite direction.',
                 minimum: 1,
                 maximum: 360,
                 default: 90
             },
             yaw: {
                 type: 'number',
-                description: 'Target yaw rotation (when type=absolute)',
+                description: 'Absolute horizontal rotation angle in degrees. 0=North, 90=East, 180=South, -90/270=West. Example: yaw=90 makes agent face East. Only used when type=absolute.',
                 minimum: -180,
                 maximum: 180
             },
             pitch: {
                 type: 'number',
-                description: 'Target pitch rotation (when type=absolute)',
+                description: 'Absolute vertical rotation angle in degrees. 0=looking straight ahead, -90=looking up, 90=looking down. Example: pitch=-45 makes agent look upward at 45°. Only used when type=absolute.',
                 minimum: -90,
                 maximum: 90,
                 default: 0

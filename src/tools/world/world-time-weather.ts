@@ -6,34 +6,34 @@ import { ToolCallResult, InputSchema } from '../../types';
  */
 export class WorldTimeWeatherTool extends BaseTool {
     readonly name = 'world_time_weather';
-    readonly description = 'Control world time and weather settings';
+    readonly description = 'Control the world\'s time of day and weather conditions for atmosphere, gameplay, or cinematic purposes. Perfect for setting scenes, optimizing visibility, creating dramatic effects, or syncing with real activities. Time controls day/night cycle (0=sunrise, 6000=noon, 12000=sunset, 18000=midnight). Weather affects visibility, ambiance, and gameplay mechanics. Essential for world management and environmental storytelling.'
     readonly inputSchema: InputSchema = {
         type: 'object',
         properties: {
             type: {
                 type: 'string',
-                description: 'Control type',
+                description: 'What to control: "time" changes day/night cycle only, "weather" changes weather only, "both" changes time and weather simultaneously',
                 enum: ['time', 'weather', 'both']
             },
             time: {
                 type: 'string',
-                description: 'Time setting (when type=time or both)',
+                description: 'Preset time periods: "day"=morning (1000), "noon"=midday (6000), "sunset"=evening (12000), "night"=dark (13000), "midnight"=deepest night (18000), "sunrise"=dawn (23000). Perfect for specific lighting conditions.',
                 enum: ['day', 'night', 'noon', 'midnight', 'sunrise', 'sunset']
             },
             timeValue: {
                 type: 'number',
-                description: 'Specific time value in ticks (0-24000, when type=time or both)',
+                description: 'Precise time in game ticks (0-24000). 0=sunrise, 6000=noon, 12000=sunset, 18000=midnight. One Minecraft day = 24000 ticks = 20 real minutes. Example: 15000 for late night.',
                 minimum: 0,
                 maximum: 24000
             },
             weather: {
                 type: 'string',
-                description: 'Weather setting (when type=weather or both)',
+                description: 'Weather conditions: "clear" removes all weather, "rain" creates rainfall (reduces visibility, extinguishes fire), "thunder" adds lightning and heavy rain (dangerous, dramatic)',
                 enum: ['clear', 'rain', 'thunder']
             },
             duration: {
                 type: 'number',
-                description: 'Weather duration in seconds (when type=weather or both)',
+                description: 'How long the weather lasts in seconds. Example: 300 for 5 minutes of rain, 1800 for 30 minutes of clear weather. Longer durations provide stable conditions for building or events.',
                 minimum: 1,
                 maximum: 1000000,
                 default: 600

@@ -6,38 +6,38 @@ import { ToolCallResult, InputSchema } from '../../types';
  */
 export class AgentMoveTool extends BaseTool {
     readonly name = 'agent_move';
-    readonly description = 'Move the agent in a specific direction or to specific coordinates';
+    readonly description = 'Move the Minecraft agent (@c selector) in specific directions or teleport to coordinates. Perfect for automated building, exploration, or positioning the agent for tasks. The agent can move step-by-step (1 block at a time) in cardinal directions or be instantly teleported to any location. Essential for agent-based automation and precise positioning. Note: Agent must be spawned first using /summon agent.'
     readonly inputSchema: InputSchema = {
         type: 'object',
         properties: {
             type: {
                 type: 'string',
-                description: 'Movement type: direction or coordinates',
+                description: 'Movement method: "direction" for step-by-step movement (agent move forward), "coordinates" for instant teleportation (tp @c x y z)',
                 enum: ['direction', 'coordinates']
             },
             direction: {
                 type: 'string',
-                description: 'Direction to move (when type=direction)',
+                description: 'Cardinal direction for agent movement relative to its current facing. "forward" moves in the direction the agent is looking, "back" moves opposite. Perfect for systematic exploration or building patterns.',
                 enum: ['forward', 'back', 'left', 'right', 'up', 'down']
             },
             distance: {
                 type: 'number',
-                description: 'Distance to move in blocks (when type=direction)',
+                description: 'Number of blocks to move in the specified direction. Each unit equals one block. Example: distance=5 moves the agent 5 blocks forward. Executes multiple "agent move" commands in sequence.',
                 minimum: 1,
                 maximum: 100,
                 default: 1
             },
             x: {
                 type: 'number',
-                description: 'Target X coordinate (when type=coordinates)'
+                description: 'Target X coordinate for teleportation (East/West axis). Example: 100 teleports agent to X=100. Only used when type=coordinates.'
             },
             y: {
                 type: 'number',
-                description: 'Target Y coordinate (when type=coordinates)'
+                description: 'Target Y coordinate for teleportation (height/elevation). Range: -64 to 320. Example: 70 places agent at height Y=70. Only used when type=coordinates.'
             },
             z: {
                 type: 'number',
-                description: 'Target Z coordinate (when type=coordinates)'
+                description: 'Target Z coordinate for teleportation (North/South axis). Example: -50 teleports agent to Z=-50. Only used when type=coordinates.'
             }
         },
         required: ['type']

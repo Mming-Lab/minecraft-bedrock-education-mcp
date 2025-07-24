@@ -6,36 +6,36 @@ import { ToolCallResult, InputSchema } from '../../types';
  */
 export class BuildSphereTool extends BaseTool {
     readonly name = 'build_sphere';
-    readonly description = 'Build a sphere structure with specified center, radius and material';
+    readonly description = 'Build a SPHERE (round ball/circle in 3D). USE THIS when user asks for: "sphere", "ball", "dome", "round structure", "planet", "orb". ALWAYS specify: centerX, centerY, centerZ, radius. Example: centerX=100, centerY=70, centerZ=200, radius=10';
     readonly inputSchema: InputSchema = {
         type: 'object',
         properties: {
             centerX: {
                 type: 'number',
-                description: 'Center X coordinate'
+                description: 'Center X coordinate (east-west position of sphere center)'
             },
             centerY: {
                 type: 'number',
-                description: 'Center Y coordinate'
+                description: 'Center Y coordinate (height/vertical position of sphere center, typically 64-100)'
             },
             centerZ: {
                 type: 'number',
-                description: 'Center Z coordinate'
+                description: 'Center Z coordinate (north-south position of sphere center)'
             },
             radius: {
                 type: 'number',
-                description: 'Radius of the sphere',
+                description: 'Radius of the sphere in blocks (how big the sphere is). Small: 3-5, Medium: 8-12, Large: 15-20',
                 minimum: 1,
                 maximum: 20
             },
             material: {
                 type: 'string',
-                description: 'Block material to use',
+                description: 'Block type to build with (e.g. stone, glass, wool, concrete, etc.)',
                 default: 'minecraft:stone'
             },
             hollow: {
                 type: 'boolean',
-                description: 'Create hollow sphere (default: false)',
+                description: 'Make it hollow (true) for sphere shell/dome, or solid (false) for full sphere',
                 default: false
             }
         },

@@ -37,7 +37,7 @@ import { ToolCallResult, InputSchema } from '../../../types';
  */
 export class BuildCylinderTool extends BaseTool {
     readonly name = 'build_cylinder';
-    readonly description = 'Build a CYLINDER (round tower/pillar). USE THIS when user asks for: "tower", "pillar", "column", "chimney", "round building", "circular tower", "pipe", "tube". ALWAYS specify: centerX, centerY, centerZ, radius, height. Example: centerX=0, centerY=64, centerZ=0, radius=5, height=20';
+    readonly description = 'Build CYLINDER: tower, pillar, column, chimney, pipe, tube. Requires: centerX,centerY,centerZ,radius,height. Optional: axis';
     readonly inputSchema: InputSchema = {
         type: 'object',
         properties: {

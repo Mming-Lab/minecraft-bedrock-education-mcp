@@ -37,7 +37,7 @@ import { ToolCallResult, InputSchema } from '../../../types';
  */
 export class BuildHelixTool extends BaseTool {
     readonly name = 'build_helix';
-    readonly description = 'Build a HELIX/SPIRAL. USE THIS when user asks for: "spiral staircase", "spiral", "corkscrew", "DNA model", "twisted tower", "spiral path". ALWAYS specify: centerX, centerY, centerZ, radius, height, turns. Example: centerX=0, centerY=64, centerZ=0, radius=5, height=20, turns=3';
+    readonly description = 'Build HELIX/SPIRAL: spiral staircase, corkscrew, DNA model, twisted tower. Requires: centerX,centerY,centerZ,radius,height,turns. Optional: axis,direction,chirality';
     readonly inputSchema: InputSchema = {
         type: 'object',
         properties: {
@@ -80,6 +80,24 @@ export class BuildHelixTool extends BaseTool {
                 type: 'boolean',
                 description: 'Rotation direction: true=clockwise (right-hand spiral), false=counter-clockwise (left-hand spiral)',
                 default: true
+            },
+            axis: {
+                type: 'string',
+                description: 'Helix axis direction: x (east-west), y (up-down), z (north-south)',
+                enum: ['x', 'y', 'z'],
+                default: 'y'
+            },
+            direction: {
+                type: 'string',
+                description: 'Growth direction along axis: positive or negative',
+                enum: ['positive', 'negative'],
+                default: 'positive'
+            },
+            chirality: {
+                type: 'string',
+                description: 'Helix handedness: right (clockwise from growth direction), left (counter-clockwise)',
+                enum: ['right', 'left'],
+                default: 'right'
             }
         },
         required: ['centerX', 'centerY', 'centerZ', 'radius', 'height', 'turns']
@@ -129,6 +147,9 @@ export class BuildHelixTool extends BaseTool {
         turns: number;
         material?: string;
         clockwise?: boolean;
+        axis?: 'x' | 'y' | 'z';
+        direction?: 'positive' | 'negative';
+        chirality?: 'right' | 'left';
     }): Promise<ToolCallResult> {
         try {
             // Socket-BE API接続確認
@@ -153,7 +174,10 @@ export class BuildHelixTool extends BaseTool {
                 height, 
                 turns, 
                 material = 'minecraft:stone', 
-                clockwise = true 
+                clockwise = true,
+                axis = 'y',
+                direction = 'positive',
+                chirality = 'right'
             } = args;
             
             // 座標の整数化
@@ -198,9 +222,40 @@ export class BuildHelixTool extends BaseTool {
             const commands: string[] = [];
             let blocksPlaced = 0;
             
+            // 座標変換ヘルパー関数
+            const transformCoordinates = (localX: number, localY: number, localZ: number): {x: number, y: number, z: number} => {
+                const directionMultiplier = direction === 'positive' ? 1 : -1;
+                const chiralityMultiplier = chirality === 'right' ? 1 : -1;
+                
+                switch (axis) {
+                    case 'x':
+                        // X軸らせん: YZ平面で回転、X方向に進行
+                        return {
+                            x: center.x + localY * directionMultiplier,
+                            y: center.y + localX * chiralityMultiplier,
+                            z: center.z + localZ * chiralityMultiplier
+                        };
+                    case 'z':
+                        // Z軸らせん: XY平面で回転、Z方向に進行
+                        return {
+                            x: center.x + localX * chiralityMultiplier,
+                            y: center.y + localZ * chiralityMultiplier,
+                            z: center.z + localY * directionMultiplier
+                        };
+                    case 'y':
+                    default:
+                        // Y軸らせん（デフォルト）: XZ平面で回転、Y方向に進行
+                        return {
+                            x: center.x + localX * chiralityMultiplier,
+                            y: center.y + localY * directionMultiplier,
+                            z: center.z + localZ * chiralityMultiplier
+                        };
+                }
+            };
+            
             // 3D Bresenham風螺旋アルゴリズム（候補点3つの決定版）
             const totalAngle = turns * 2 * Math.PI; // 総回転角度（ラジアン）
-            const direction = clockwise ? 1 : -1; // 回転方向
+            const rotationDirection = clockwise ? 1 : -1; // 回転方向
             
             const placedPositions = new Set<string>();
             
@@ -225,14 +280,15 @@ export class BuildHelixTool extends BaseTool {
             // 円のBresenham準拠: 角度を離散化
             const totalAngleSteps = Math.round(totalAngle * radiusInt / Math.PI); // 角度の離散化
             
-            // 螺旋進行
-            let spiralX = center.x + radiusInt; // 開始点 (東側)
-            let spiralY = center.y;
-            let spiralZ = center.z;
+            // 螺旋進行（ローカル座標系）
+            let localSpiralX = radiusInt; // 開始点 (ローカル座標の東側)
+            let localSpiralY = 0; // 高さの開始点
+            let localSpiralZ = 0; // 開始点 (ローカル座標の中心)
             
-            // 最初のブロック配置
-            commands.push(`setblock ${spiralX} ${spiralY} ${spiralZ} ${blockId}`);
-            placedPositions.add(`${spiralX},${spiralY},${spiralZ}`);
+            // 最初のブロック配置（座標変換適用）
+            let worldPos = transformCoordinates(localSpiralX, localSpiralY, localSpiralZ);
+            commands.push(`setblock ${worldPos.x} ${worldPos.y} ${worldPos.z} ${blockId}`);
+            placedPositions.add(`${worldPos.x},${worldPos.y},${worldPos.z}`);
             blocksPlaced++;
             
             // 円のMidpoint algorithm風に角度を進行
@@ -242,47 +298,44 @@ export class BuildHelixTool extends BaseTool {
             for (let step = 1; step < totalSteps && angleStep < maxAngleSteps; step++) {
                 // 角度進行 (Midpoint circle algorithm風)
                 const progress = step / totalSteps;
-                const currentAngle = progress * totalAngle * direction;
+                const currentAngle = progress * totalAngle * rotationDirection;
                 
-                // 次の円周位置 (Bresenham決定パラメータ風)
-                const nextX = center.x + Math.round(radiusInt * Math.cos(currentAngle));
-                const nextZ = center.z + Math.round(radiusInt * Math.sin(currentAngle));
+                // 次の円周位置 (ローカル座標系)
+                const nextLocalX = Math.round(radiusInt * Math.cos(currentAngle));
+                const nextLocalZ = Math.round(radiusInt * Math.sin(currentAngle));
                 
                 // 隣接性チェック: 前の位置から最大1ブロック差
-                const deltaX = Math.abs(nextX - spiralX);
-                const deltaZ = Math.abs(nextZ - spiralZ);
+                const deltaX = Math.abs(nextLocalX - localSpiralX);
+                const deltaZ = Math.abs(nextLocalZ - localSpiralZ);
                 
                 // 隣接保証: 前の点から離れすぎている場合は中間点を補間
                 if (deltaX > 1 || deltaZ > 1) {
                     // Bresenham line algorithmで中間点を補間
-                    const stepX = nextX > spiralX ? 1 : (nextX < spiralX ? -1 : 0);
-                    const stepZ = nextZ > spiralZ ? 1 : (nextZ < spiralZ ? -1 : 0);
+                    const stepX = nextLocalX > localSpiralX ? 1 : (nextLocalX < localSpiralX ? -1 : 0);
+                    const stepZ = nextLocalZ > localSpiralZ ? 1 : (nextLocalZ < localSpiralZ ? -1 : 0);
                     
-                    spiralX += stepX;
-                    spiralZ += stepZ;
+                    localSpiralX += stepX;
+                    localSpiralZ += stepZ;
                 } else {
                     // 隣接している場合は直接移動
-                    spiralX = nextX;
-                    spiralZ = nextZ;
+                    localSpiralX = nextLocalX;
+                    localSpiralZ = nextLocalZ;
                 }
                 
                 // 3D Bresenham height progression (参考コード準拠)
                 y1_err -= dy;
                 if (y1_err < 0) {
                     y1_err += dm;
-                    spiralY += 1; // 高さを1ブロック上昇
+                    localSpiralY += 1; // 高さを1ブロック上昇
                 }
                 
-                // ブロック配置
-                const posKey = `${spiralX},${spiralY},${spiralZ}`;
-                if (!placedPositions.has(posKey) && spiralY < center.y + heightInt) {
+                // ブロック配置（座標変換適用）
+                worldPos = transformCoordinates(localSpiralX, localSpiralY, localSpiralZ);
+                const posKey = `${worldPos.x},${worldPos.y},${worldPos.z}`;
+                if (!placedPositions.has(posKey) && localSpiralY < heightInt) {
                     placedPositions.add(posKey);
-                    commands.push(`setblock ${spiralX} ${spiralY} ${spiralZ} ${blockId}`);
+                    commands.push(`setblock ${worldPos.x} ${worldPos.y} ${worldPos.z} ${blockId}`);
                     blocksPlaced++;
-                    
-                    currentX = spiralX;
-                    currentY = spiralY;
-                    currentZ = spiralZ;
                 }
                 
                 angleStep++;
@@ -318,7 +371,7 @@ export class BuildHelixTool extends BaseTool {
                 }
                 
                 return this.createSuccessResponse(
-                    `Helix built with ${blockId} at center (${center.x},${center.y},${center.z}) radius ${radiusInt}, height ${heightInt}, ${turns} turns, ${clockwise ? 'clockwise' : 'counter-clockwise'}. Placed ${blocksPlaced} blocks.`,
+                    `Helix built with ${blockId} at center (${center.x},${center.y},${center.z}) radius ${radiusInt}, height ${heightInt}, ${turns} turns, ${clockwise ? 'clockwise' : 'counter-clockwise'}. Axis: ${axis}, Direction: ${direction}, Chirality: ${chirality}. Placed ${blocksPlaced} blocks.`,
                     {
                         type: 'helix',
                         center: center,
@@ -327,6 +380,9 @@ export class BuildHelixTool extends BaseTool {
                         turns: turns,
                         material: blockId,
                         clockwise: clockwise,
+                        axis: axis,
+                        direction: direction,
+                        chirality: chirality,
                         blocksPlaced: blocksPlaced,
                         apiUsed: 'Socket-BE'
                     }

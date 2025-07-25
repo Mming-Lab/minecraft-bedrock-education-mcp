@@ -37,7 +37,7 @@ import { ToolCallResult, InputSchema } from '../../../types';
  */
 export class BuildTorusTool extends BaseTool {
     readonly name = 'build_torus';
-    readonly description = 'Build a torus (donut/ring shape) structure. Perfect for decorative rings, circular fountains, arena seating, or portals. Example: majorRadius=15 (outer ring size), minorRadius=4 (tube thickness) creates a large donut fountain';
+    readonly description = 'Build TORUS: donut, ring, circular fountain, arena seating, portal. Requires: centerX,centerY,centerZ,majorRadius,minorRadius. Optional: axis';
     readonly inputSchema: InputSchema = {
         type: 'object',
         properties: {
@@ -74,6 +74,12 @@ export class BuildTorusTool extends BaseTool {
                 type: 'boolean',
                 description: 'Make it hollow (true) for ring shell only, or solid (false) for full torus structure',
                 default: false
+            },
+            axis: {
+                type: 'string',
+                description: 'Torus axis (normal to the plane): x (YZ-plane torus), y (XZ-plane torus), z (XY-plane torus)',
+                enum: ['x', 'y', 'z'],
+                default: 'y'
             }
         },
         required: ['centerX', 'centerY', 'centerZ', 'majorRadius', 'minorRadius']
@@ -121,6 +127,7 @@ export class BuildTorusTool extends BaseTool {
         minorRadius: number;
         material?: string;
         hollow?: boolean;
+        axis?: 'x' | 'y' | 'z';
     }): Promise<ToolCallResult> {
         try {
             // Socket-BE API接続確認
@@ -144,7 +151,8 @@ export class BuildTorusTool extends BaseTool {
                 majorRadius, 
                 minorRadius, 
                 material = 'minecraft:stone', 
-                hollow = false 
+                hollow = false,
+                axis = 'y'
             } = args;
             
             // 座標の整数化
@@ -190,6 +198,34 @@ export class BuildTorusTool extends BaseTool {
             const commands: string[] = [];
             let blocksPlaced = 0;
             
+            // 座標変換ヘルパー関数
+            const transformCoordinates = (localX: number, localY: number, localZ: number): {x: number, y: number, z: number} => {
+                switch (axis) {
+                    case 'x':
+                        // X軸トーラス: YZ平面でドーナツ、X軸が法線
+                        return {
+                            x: center.x + localY,  // Y(tube height) → X (axis direction)
+                            y: center.y + localX,  // X(major radius) → Y
+                            z: center.z + localZ   // Z(major radius) → Z
+                        };
+                    case 'z':
+                        // Z軸トーラス: XY平面でドーナツ、Z軸が法線
+                        return {
+                            x: center.x + localX,  // X(major radius) → X
+                            y: center.y + localZ,  // Z(major radius) → Y
+                            z: center.z + localY   // Y(tube height) → Z (axis direction)
+                        };
+                    case 'y':
+                    default:
+                        // Y軸トーラス（デフォルト）: XZ平面でドーナツ、Y軸が法線
+                        return {
+                            x: center.x + localX,  // X(major radius) → X
+                            y: center.y + localY,  // Y(tube height) → Y (axis direction)
+                            z: center.z + localZ   // Z(major radius) → Z
+                        };
+                }
+            };
+            
             // トーラス形状の計算
             const minorRadiusSquared = minorRadiusInt * minorRadiusInt;
             const innerMinorRadius = hollow ? Math.max(0, minorRadiusInt - 1) : 0;
@@ -221,11 +257,10 @@ export class BuildTorusTool extends BaseTool {
                         if (tubeDistanceSquared <= minorRadiusSquared &&
                             (!hollow || tubeDistanceSquared >= innerMinorRadiusSquared)) {
                             
-                            const worldX = center.x + x;
-                            const worldY = center.y + y;
-                            const worldZ = center.z + z;
+                            // 座標変換を適用
+                            const worldPos = transformCoordinates(x, y, z);
                             
-                            commands.push(`setblock ${worldX} ${worldY} ${worldZ} ${blockId}`);
+                            commands.push(`setblock ${worldPos.x} ${worldPos.y} ${worldPos.z} ${blockId}`);
                             blocksPlaced++;
                         }
                     }
@@ -262,7 +297,7 @@ export class BuildTorusTool extends BaseTool {
                 }
                 
                 return this.createSuccessResponse(
-                    `${hollow ? 'Hollow' : 'Solid'} torus built with ${blockId} at center (${center.x},${center.y},${center.z}) major radius ${majorRadiusInt}, minor radius ${minorRadiusInt}. Placed ${blocksPlaced} blocks.`,
+                    `${hollow ? 'Hollow' : 'Solid'} torus built with ${blockId} at center (${center.x},${center.y},${center.z}) major radius ${majorRadiusInt}, minor radius ${minorRadiusInt}. Axis: ${axis}. Placed ${blocksPlaced} blocks.`,
                     {
                         type: 'torus',
                         center: center,
@@ -270,6 +305,7 @@ export class BuildTorusTool extends BaseTool {
                         minorRadius: minorRadiusInt,
                         material: blockId,
                         hollow: hollow,
+                        axis: axis,
                         blocksPlaced: blocksPlaced,
                         apiUsed: 'Socket-BE'
                     }

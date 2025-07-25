@@ -37,7 +37,7 @@ import { ToolCallResult, InputSchema } from '../../../types';
  */
 export class BuildParaboloidTool extends BaseTool {
     readonly name = 'build_paraboloid';
-    readonly description = 'Build a PARABOLOID (satellite dish shape). USE THIS when user asks for: "paraboloid", "satellite dish", "bowl", "dish", "parabolic". ALWAYS specify: centerX, centerY, centerZ, radius, height. Example: centerX=100, centerY=70, centerZ=200, radius=8, height=10';
+    readonly description = 'Build PARABOLOID: satellite dish, bowl, dish, parabolic. Requires: centerX,centerY,centerZ,radius,height. Optional: axis,direction';
     readonly inputSchema: InputSchema = {
         type: 'object',
         properties: {
@@ -74,6 +74,18 @@ export class BuildParaboloidTool extends BaseTool {
                 type: 'boolean',
                 description: 'Make it hollow (true) for dish shell, or solid (false) for full paraboloid',
                 default: false
+            },
+            axis: {
+                type: 'string',
+                description: 'Paraboloid axis direction: x (east-west), y (up-down), z (north-south)',
+                enum: ['x', 'y', 'z'],
+                default: 'y'
+            },
+            direction: {
+                type: 'string',
+                description: 'Opening direction: positive (opens toward +axis), negative (opens toward -axis)',
+                enum: ['positive', 'negative'],
+                default: 'positive'
             }
         },
         required: ['centerX', 'centerY', 'centerZ', 'radius', 'height']
@@ -120,6 +132,8 @@ export class BuildParaboloidTool extends BaseTool {
         height: number;
         material?: string;
         hollow?: boolean;
+        axis?: 'x' | 'y' | 'z';
+        direction?: 'positive' | 'negative';
     }): Promise<ToolCallResult> {
         try {
             // Socket-BE API接続確認
@@ -127,7 +141,7 @@ export class BuildParaboloidTool extends BaseTool {
                 return { success: false, message: "World not available. Ensure Minecraft is connected." };
             }
 
-            const { centerX, centerY, centerZ, radius, height, material = 'minecraft:stone', hollow = false } = args;
+            const { centerX, centerY, centerZ, radius, height, material = 'minecraft:stone', hollow = false, axis = 'y', direction = 'positive' } = args;
             
             // 座標の整数化
             const center = {
@@ -170,6 +184,36 @@ export class BuildParaboloidTool extends BaseTool {
             
             const radiusInt = Math.round(radius);
             const heightInt = Math.round(height);
+            
+            // 座標変換ヘルパー関数
+            const transformCoordinates = (localX: number, localY: number, localZ: number): {x: number, y: number, z: number} => {
+                const directionMultiplier = direction === 'positive' ? 1 : -1;
+                
+                switch (axis) {
+                    case 'x':
+                        // X軸パラボロイド: Y-Z平面で展開、X方向に開く
+                        return {
+                            x: center.x + localY * directionMultiplier,
+                            y: center.y + localZ,
+                            z: center.z + localX
+                        };
+                    case 'z':
+                        // Z軸パラボロイド: X-Y平面で展開、Z方向に開く
+                        return {
+                            x: center.x + localX,
+                            y: center.y + localZ,
+                            z: center.z + localY * directionMultiplier
+                        };
+                    case 'y':
+                    default:
+                        // Y軸パラボロイド（デフォルト）: X-Z平面で展開、Y方向に開く
+                        return {
+                            x: center.x + localX,
+                            y: center.y + localY * directionMultiplier,
+                            z: center.z + localZ
+                        };
+                }
+            };
             const radiusSquared = radiusInt * radiusInt;
             
             // パラボロイドの方程式: z = (x² + y²) / (4 * focal_length)
@@ -199,11 +243,10 @@ export class BuildParaboloidTool extends BaseTool {
                         
                         if (distanceSquared <= currentRadiusSquared &&
                             (!hollow || distanceSquared >= innerRadiusSquared)) {
-                            const worldX = center.x + x;
-                            const worldY = center.y + y;
-                            const worldZ = center.z + z;
+                            // 座標変換を適用
+                            const worldPos = transformCoordinates(x, y, z);
                             
-                            commands.push(`setblock ${worldX} ${worldY} ${worldZ} ${blockId}`);
+                            commands.push(`setblock ${worldPos.x} ${worldPos.y} ${worldPos.z} ${blockId}`);
                             blocksPlaced++;
                         }
                     }
@@ -242,7 +285,7 @@ export class BuildParaboloidTool extends BaseTool {
                 }
                 
                 return this.createSuccessResponse(
-                    `${hollow ? 'Hollow' : 'Solid'} paraboloid built with ${blockId} at center (${center.x},${center.y},${center.z}) with radius ${radiusInt} and height ${heightInt}. Placed ${blocksPlaced} blocks.`,
+                    `${hollow ? 'Hollow' : 'Solid'} paraboloid built with ${blockId} at center (${center.x},${center.y},${center.z}) with radius ${radiusInt} and height ${heightInt}. Axis: ${axis}, Direction: ${direction}. Placed ${blocksPlaced} blocks.`,
                     {
                         type: 'paraboloid',
                         center: center,
@@ -250,6 +293,8 @@ export class BuildParaboloidTool extends BaseTool {
                         height: heightInt,
                         material: blockId,
                         hollow: hollow,
+                        axis: axis,
+                        direction: direction,
                         blocksPlaced: blocksPlaced,
                         apiUsed: 'Socket-BE'
                     }

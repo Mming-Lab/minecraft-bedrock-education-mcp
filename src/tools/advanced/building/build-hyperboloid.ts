@@ -37,7 +37,7 @@ import { ToolCallResult, InputSchema } from '../../../types';
  */
 export class BuildHyperboloidTool extends BaseTool {
     readonly name = 'build_hyperboloid';
-    readonly description = 'Build a HYPERBOLOID (cooling tower shape). USE THIS when user asks for: "hyperboloid", "cooling tower", "hourglass", "tower", "nuclear tower". ALWAYS specify: centerX, centerY, centerZ, baseRadius, waistRadius, height. Example: centerX=100, centerY=70, centerZ=200, baseRadius=10, waistRadius=5, height=20';
+    readonly description = 'Build HYPERBOLOID: cooling tower, hourglass, nuclear tower. Requires: centerX,centerY,centerZ,baseRadius,waistRadius,height. Optional: axis';
     readonly inputSchema: InputSchema = {
         type: 'object',
         properties: {
@@ -80,6 +80,12 @@ export class BuildHyperboloidTool extends BaseTool {
                 type: 'boolean',
                 description: 'Make it hollow (true) for tower shell, or solid (false) for full hyperboloid',
                 default: false
+            },
+            axis: {
+                type: 'string',
+                description: 'Hyperboloid axis direction: x (east-west), y (up-down), z (north-south)',
+                enum: ['x', 'y', 'z'],
+                default: 'y'
             }
         },
         required: ['centerX', 'centerY', 'centerZ', 'baseRadius', 'waistRadius', 'height']
@@ -130,6 +136,7 @@ export class BuildHyperboloidTool extends BaseTool {
         height: number;
         material?: string;
         hollow?: boolean;
+        axis?: 'x' | 'y' | 'z';
     }): Promise<ToolCallResult> {
         try {
             // Socket-BE API接続確認
@@ -137,7 +144,7 @@ export class BuildHyperboloidTool extends BaseTool {
                 return { success: false, message: "World not available. Ensure Minecraft is connected." };
             }
 
-            const { centerX, centerY, centerZ, baseRadius, waistRadius, height, material = 'minecraft:stone', hollow = false } = args;
+            const { centerX, centerY, centerZ, baseRadius, waistRadius, height, material = 'minecraft:stone', hollow = false, axis = 'y' } = args;
             
             // 座標の整数化
             const center = {
@@ -195,6 +202,34 @@ export class BuildHyperboloidTool extends BaseTool {
             const baseRadiusInt = Math.round(baseRadius);
             const waistRadiusInt = Math.round(waistRadius);
             const heightInt = Math.round(height);
+            
+            // 座標変換ヘルパー関数
+            const transformCoordinates = (localX: number, localY: number, localZ: number): {x: number, y: number, z: number} => {
+                switch (axis) {
+                    case 'x':
+                        // X軸ハイパーボロイド: Y-Z平面で展開、X方向に伸びる
+                        return {
+                            x: center.x + localY,
+                            y: center.y + localZ,
+                            z: center.z + localX
+                        };
+                    case 'z':
+                        // Z軸ハイパーボロイド: X-Y平面で展開、Z方向に伸びる
+                        return {
+                            x: center.x + localX,
+                            y: center.y + localZ,
+                            z: center.z + localY
+                        };
+                    case 'y':
+                    default:
+                        // Y軸ハイパーボロイド（デフォルト）: X-Z平面で展開、Y方向に伸びる
+                        return {
+                            x: center.x + localX,
+                            y: center.y + localY,
+                            z: center.z + localZ
+                        };
+                }
+            };
             const halfHeight = Math.floor(heightInt / 2);
             
             // 双曲面の形状パラメータ
@@ -225,11 +260,10 @@ export class BuildHyperboloidTool extends BaseTool {
                         
                         if (distanceSquared <= currentRadiusSquared &&
                             (!hollow || distanceSquared >= innerRadiusSquared)) {
-                            const worldX = center.x + x;
-                            const worldY = center.y + y;
-                            const worldZ = center.z + z;
+                            // 座標変換を適用
+                            const worldPos = transformCoordinates(x, y, z);
                             
-                            commands.push(`setblock ${worldX} ${worldY} ${worldZ} ${blockId}`);
+                            commands.push(`setblock ${worldPos.x} ${worldPos.y} ${worldPos.z} ${blockId}`);
                             blocksPlaced++;
                         }
                     }
@@ -268,7 +302,7 @@ export class BuildHyperboloidTool extends BaseTool {
                 }
                 
                 return this.createSuccessResponse(
-                    `${hollow ? 'Hollow' : 'Solid'} hyperboloid built with ${blockId} at center (${center.x},${center.y},${center.z}) with base radius ${baseRadiusInt}, waist radius ${waistRadiusInt}, and height ${heightInt}. Placed ${blocksPlaced} blocks.`,
+                    `${hollow ? 'Hollow' : 'Solid'} hyperboloid built with ${blockId} at center (${center.x},${center.y},${center.z}) with base radius ${baseRadiusInt}, waist radius ${waistRadiusInt}, and height ${heightInt}. Axis: ${axis}. Placed ${blocksPlaced} blocks.`,
                     {
                         type: 'hyperboloid',
                         center: center,
@@ -277,6 +311,7 @@ export class BuildHyperboloidTool extends BaseTool {
                         height: heightInt,
                         material: blockId,
                         hollow: hollow,
+                        axis: axis,
                         blocksPlaced: blocksPlaced,
                         apiUsed: 'Socket-BE'
                     }

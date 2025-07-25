@@ -3,19 +3,19 @@ import { ToolCallResult, InputSchema } from '../../types';
 import { GameMode, AbilityType } from 'socket-be';
 
 /**
- * Socket-BE Player操作ツール
+ * Player操作ツール
  * プレイヤー管理、権限、情報取得に特化
  */
 export class PlayerTool extends BaseTool {
     readonly name = 'player';
-    readonly description = 'Player management using Socket-BE APIs. Handles player information, abilities, game modes, inventory, and communication. Provides easy player queries, permission management, and item giving. AI-optimized for player administration and interaction.';
+    readonly description = 'Player management. Handles player information, abilities, game modes, inventory, and communication. Provides easy player queries, permission management, and item giving. AI-optimized for player administration and interaction.';
     
     readonly inputSchema: InputSchema = {
         type: 'object',
         properties: {
             action: {
                 type: 'string',
-                description: 'Player operation to perform',
+                description: 'Player operation to perform: get_info (returns player details like name, uniqueId, uuid, deviceId, xuid, isValid, isLoaded, isLocalPlayer), get_location (returns foot coordinates x,y,z and rotation in both Minecraft yaw -180°~+180° and compass bearing 0°~360° systems), send_message (sends chat message, requires: message), give_item (gives items to inventory, requires: item_id, optional: amount, can_destroy, can_place_on, keep_on_death), set_gamemode (changes game mode, optional: gamemode survival/creative/adventure/spectator, defaults to survival), add_levels (adds XP levels, requires: levels positive integer), get_abilities (returns abilities object with boolean values for mayfly/mute/worldbuilder), set_ability (modifies ability, requires: ability mayfly/mute/worldbuilder, ability_value boolean), get_tags (returns array of player tags), check_tag (checks specific tag, requires: tag, returns boolean), get_ping (returns network ping in milliseconds), list_all_players (returns array of online players with name, isLocalPlayer, isValid, isLoaded)',
                 enum: [
                     'get_info', 'get_location', 'send_message', 'give_item', 'set_gamemode',
                     'add_levels', 'get_abilities', 'set_ability', 'get_tags', 'check_tag',
@@ -149,8 +149,21 @@ export class PlayerTool extends BaseTool {
                     break;
 
                 case 'get_location':
-                    result = await player.getLocation();
-                    message = `Location retrieved for ${player.name}`;
+                    const headLocation = await player.getLocation();
+                    const queryResult = await player.query();
+                    // Minecraft yaw をコンパス座標系に変換
+                    const compassBearing = this.minecraftYawToCompass(queryResult.yRot);
+                    // 頭部座標から足元座標に変換（Y座標を-1.63調整）
+                    result = {
+                        x: headLocation.x,
+                        y: Math.floor(headLocation.y - 1.63), // 足元の整数座標
+                        z: headLocation.z,
+                        rotation: {
+                            minecraft_yaw: queryResult.yRot, // Minecraft座標系: 0°=南, -90°=東, +90°=西, ±180°=北
+                            compass_bearing: compassBearing  // コンパス座標系: 0°=北, 90°=東, 180°=南, 270°=西
+                        }
+                    };
+                    message = `Location and rotation retrieved for ${player.name} (converted from head position)`;
                     break;
 
                 case 'send_message':
@@ -267,5 +280,19 @@ export class PlayerTool extends BaseTool {
             default:
                 return GameMode.survival;
         }
+    }
+
+    /**
+     * MinecraftのYaw度数をコンパス座標系（北基準、時計回り）に変換
+     * Minecraft: 0°=南, -90°=東, +90°=西, ±180°=北
+     * コンパス: 0°=北, 90°=東, 180°=南, 270°=西
+     */
+    private minecraftYawToCompass(minecraftYaw: number): number {
+        // Minecraft yaw を コンパス bearing に変換
+        // Minecraft: 0°=南, -90°=東, +90°=西, ±180°=北
+        // コンパス: 0°=北, 90°=東, 180°=南, 270°=西
+        let compass = (-minecraftYaw + 180 + 360) % 360;
+        
+        return Math.round(compass * 100) / 100; // 小数点2桁まで
     }
 }

@@ -3,12 +3,12 @@ import { ToolCallResult, InputSchema } from '../../types';
 import { WeatherType } from 'socket-be';
 
 /**
- * Socket-BE World管理ツール
+ * World管理ツール
  * 時間、天気、ワールド情報の制御に特化
  */
 export class WorldTool extends BaseTool {
     readonly name = 'world';
-    readonly description = 'World management using Socket-BE APIs. Controls time, weather, world information, and environment settings. Provides simple commands for day/night cycles, weather changes, world queries, and connection management. AI-optimized for easy world state manipulation.';
+    readonly description = 'World management. Controls time, weather, world information, and environment settings. Provides simple commands for day/night cycles, weather changes, world queries, and connection management. AI-optimized for easy world state manipulation.';
     
     readonly inputSchema: InputSchema = {
         type: 'object',

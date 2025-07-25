@@ -584,7 +584,9 @@ export class MinecraftMCPServer {
                 result: {
                     content: [{
                         type: 'text',
-                        text: result.message || `Tool ${toolName} executed successfully`
+                        text: result.data ? 
+                            `${result.message || `Tool ${toolName} executed successfully`}\n\nData: ${JSON.stringify(result.data, null, 2)}` :
+                            result.message || `Tool ${toolName} executed successfully`
                     }]
                 }
             };

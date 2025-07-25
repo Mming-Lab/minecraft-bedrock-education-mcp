@@ -3,12 +3,12 @@ import { ToolCallResult, InputSchema } from '../../types';
 import { AgentDirection } from 'socket-be';
 
 /**
- * Socket-BE Agent高レベル制御ツール
+ * Agent高レベル制御ツール
  * AIフレンドリーな設計で複雑なエージェント操作を簡単に実行
  */
 export class AgentTool extends BaseTool {
     readonly name = 'agent';
-    readonly description = 'High-level agent control using Socket-BE APIs. Provides intuitive agent operations including movement, building, mining, inventory management, and exploration. Optimized for AI with clear parameters and predictable behavior. Perfect for automated construction, resource gathering, and complex agent-based tasks.';
+    readonly description = 'High-level agent control. Provides intuitive agent operations including movement, building, mining, inventory management, and exploration. Optimized for AI with clear parameters and predictable behavior. Perfect for automated construction, resource gathering, and complex agent-based tasks.';
     
     readonly inputSchema: InputSchema = {
         type: 'object',

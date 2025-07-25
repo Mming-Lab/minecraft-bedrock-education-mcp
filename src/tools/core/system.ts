@@ -2,12 +2,12 @@ import { BaseTool } from '../base/tool';
 import { ToolCallResult, InputSchema } from '../../types';
 
 /**
- * Socket-BE Minecraftシステムツール
+ * Minecraftシステムツール
  * スコアボード、画面表示、システム機能に特化
  */
 export class SystemTool extends BaseTool {
     readonly name = 'system';
-    readonly description = 'Minecraft system features using Socket-BE APIs. Manages scoreboards, screen displays (titles, action bars), and system utilities. Provides scoreboard operations, player UI control, and advanced display features. AI-optimized for game management and player communication.';
+    readonly description = 'Minecraft system features. Manages scoreboards, screen displays (titles, action bars), and system utilities. Provides scoreboard operations, player UI control, and advanced display features. AI-optimized for game management and player communication.';
     
     readonly inputSchema: InputSchema = {
         type: 'object',

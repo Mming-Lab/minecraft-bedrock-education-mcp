@@ -3,12 +3,12 @@ import { ToolCallResult, InputSchema } from '../../types';
 import { SetBlockMode, FillBlocksMode } from 'socket-be';
 
 /**
- * Socket-BE Block操作高レベルツール
+ * Block操作高レベルツール
  * ブロック設置・塗りつぶし・情報取得に特化
  */
 export class BlocksTool extends BaseTool {
     readonly name = 'blocks';
-    readonly description = 'Advanced block operations using Socket-BE APIs. Provides efficient block placement, area filling, and terrain queries. Supports single blocks, large areas, and surface detection. Optimized for AI with clear coordinate parameters and building-focused operations.';
+    readonly description = 'Advanced block operations. Provides efficient block placement, area filling, and terrain queries. Supports single blocks, large areas, and surface detection. Optimized for AI with clear coordinate parameters and building-focused operations.';
     
     readonly inputSchema: InputSchema = {
         type: 'object',

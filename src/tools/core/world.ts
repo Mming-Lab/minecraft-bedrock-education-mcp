@@ -8,7 +8,7 @@ import { WeatherType } from 'socket-be';
  */
 export class WorldTool extends BaseTool {
     readonly name = 'world';
-    readonly description = 'World management. Controls time, weather, world information, and environment settings. Provides simple commands for day/night cycles, weather changes, world queries, and connection management. AI-optimized for easy world state manipulation.';
+    readonly description = 'World management: time, weather, environment, day/night cycles, world queries, connections';
     
     readonly inputSchema: InputSchema = {
         type: 'object',

@@ -37,7 +37,7 @@ import { ToolCallResult, InputSchema } from '../../../types';
  */
 export class BuildSphereTool extends BaseTool {
     readonly name = 'build_sphere';
-    readonly description = 'Build a SPHERE (round ball/circle in 3D). USE THIS when user asks for: "sphere", "ball", "dome", "round structure", "planet", "orb". ALWAYS specify: centerX, centerY, centerZ, radius. Example: centerX=100, centerY=70, centerZ=200, radius=10';
+    readonly description = 'Build SPHERE: ball, dome, round structure, planet, orb. Requires: centerX,centerY,centerZ,radius';
     readonly inputSchema: InputSchema = {
         type: 'object',
         properties: {

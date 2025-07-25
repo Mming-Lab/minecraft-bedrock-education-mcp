@@ -8,7 +8,7 @@ import { GameMode, AbilityType } from 'socket-be';
  */
 export class PlayerTool extends BaseTool {
     readonly name = 'player';
-    readonly description = 'Player management. Handles player information, abilities, game modes, inventory, and communication. Provides easy player queries, permission management, and item giving. AI-optimized for player administration and interaction.';
+    readonly description = 'Player management: information, abilities, game modes, inventory, communication, permissions, items';
     
     readonly inputSchema: InputSchema = {
         type: 'object',

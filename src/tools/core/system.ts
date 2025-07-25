@@ -7,7 +7,7 @@ import { ToolCallResult, InputSchema } from '../../types';
  */
 export class SystemTool extends BaseTool {
     readonly name = 'system';
-    readonly description = 'Minecraft system features. Manages scoreboards, screen displays (titles, action bars), and system utilities. Provides scoreboard operations, player UI control, and advanced display features. AI-optimized for game management and player communication.';
+    readonly description = 'System features: scoreboards, screen displays (titles, action bars), player UI, game management';
     
     readonly inputSchema: InputSchema = {
         type: 'object',

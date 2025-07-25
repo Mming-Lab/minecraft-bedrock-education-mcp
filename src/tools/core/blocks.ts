@@ -8,7 +8,7 @@ import { SetBlockMode, FillBlocksMode } from 'socket-be';
  */
 export class BlocksTool extends BaseTool {
     readonly name = 'blocks';
-    readonly description = 'Advanced block operations. Provides efficient block placement, area filling, and terrain queries. Supports single blocks, large areas, and surface detection. Optimized for AI with clear coordinate parameters and building-focused operations.';
+    readonly description = 'Block operations: placement, area filling, terrain queries, single blocks, large areas, surface detection';
     
     readonly inputSchema: InputSchema = {
         type: 'object',

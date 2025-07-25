@@ -1,5 +1,5 @@
-import { BaseTool } from '../base/tool';
-import { ToolCallResult, InputSchema } from '../../types';
+import { BaseTool } from '../../base/tool';
+import { ToolCallResult, InputSchema } from '../../../types';
 
 /**
  * 立方体構造物を建築するツール
@@ -151,53 +151,73 @@ export class BuildCubeTool extends BaseTool {
                 };
             }
             
+            // Socket-BE APIを使用してブロック配置
+            if (!this.world) {
+                return { success: false, message: 'World not available. Ensure Minecraft is connected.' };
+            }
+
             // ブロックIDの正規化
             let blockId = material;
             if (!blockId.includes(':')) {
                 blockId = `minecraft:${blockId}`;
             }
-            
-            let commands: string[] = [];
-            
-            if (hollow) {
-                // 中空の立方体を作成
-                // 外壁を作成
-                commands.push(`fill ${coords.x1} ${coords.y1} ${coords.z1} ${coords.x2} ${coords.y2} ${coords.z2} ${blockId}`);
+
+            try {
+                let blocksPlaced = 0;
                 
-                // 内部を空洞にする（1ブロック内側）
-                const innerX1 = Math.min(coords.x1, coords.x2) + 1;
-                const innerY1 = Math.min(coords.y1, coords.y2) + 1;
-                const innerZ1 = Math.min(coords.z1, coords.z2) + 1;
-                const innerX2 = Math.max(coords.x1, coords.x2) - 1;
-                const innerY2 = Math.max(coords.y1, coords.y2) - 1;
-                const innerZ2 = Math.max(coords.z1, coords.z2) - 1;
-                
-                // 内部に空洞があるかチェック
-                if (innerX1 <= innerX2 && innerY1 <= innerY2 && innerZ1 <= innerZ2) {
-                    commands.push(`fill ${innerX1} ${innerY1} ${innerZ1} ${innerX2} ${innerY2} ${innerZ2} air`);
+                if (hollow) {
+                    // 中空立方体: 外壁を作成してから内部を削除
+                    // 1. まず外壁全体を作成
+                    blocksPlaced = await this.world.fillBlocks(
+                        {x: coords.x1, y: coords.y1, z: coords.z1},
+                        {x: coords.x2, y: coords.y2, z: coords.z2},
+                        blockId
+                    );
+                    
+                    // 2. 内部を空洞にする（1ブロック内側）
+                    const innerX1 = Math.min(coords.x1, coords.x2) + 1;
+                    const innerY1 = Math.min(coords.y1, coords.y2) + 1;
+                    const innerZ1 = Math.min(coords.z1, coords.z2) + 1;
+                    const innerX2 = Math.max(coords.x1, coords.x2) - 1;
+                    const innerY2 = Math.max(coords.y1, coords.y2) - 1;
+                    const innerZ2 = Math.max(coords.z1, coords.z2) - 1;
+                    
+                    // 内部に空洞があるかチェック
+                    if (innerX1 <= innerX2 && innerY1 <= innerY2 && innerZ1 <= innerZ2) {
+                        const removedBlocks = await this.world.fillBlocks(
+                            {x: innerX1, y: innerY1, z: innerZ1},
+                            {x: innerX2, y: innerY2, z: innerZ2},
+                            'minecraft:air'
+                        );
+                        blocksPlaced -= removedBlocks;
+                    }
+                } else {
+                    // 実体立方体: Socket-BE fillBlocks使用
+                    blocksPlaced = await this.world.fillBlocks(
+                        {x: coords.x1, y: coords.y1, z: coords.z1},
+                        {x: coords.x2, y: coords.y2, z: coords.z2},
+                        blockId
+                    );
                 }
-            } else {
-                // 実体の立方体を作成
-                commands.push(`fill ${coords.x1} ${coords.y1} ${coords.z1} ${coords.x2} ${coords.y2} ${coords.z2} ${blockId}`);
-            }
-            
-            const result = await this.executeBatch(commands, true);
-            
-            if (result.success) {
+
                 return {
                     success: true,
-                    message: `${hollow ? 'Hollow' : 'Solid'} cube built with ${blockId} from (${coords.x1},${coords.y1},${coords.z1}) to (${coords.x2},${coords.y2},${coords.z2})`,
+                    message: `${hollow ? 'Hollow' : 'Solid'} cube built with ${blockId} from (${coords.x1},${coords.y1},${coords.z1}) to (${coords.x2},${coords.y2},${coords.z2}). Placed ${blocksPlaced} blocks.`,
                     data: {
                         type: 'cube',
                         from: { x: coords.x1, y: coords.y1, z: coords.z1 },
                         to: { x: coords.x2, y: coords.y2, z: coords.z2 },
                         material: blockId,
                         hollow: hollow,
-                        volume: volume
+                        volume: blocksPlaced,
+                        apiUsed: 'Socket-BE'
                     }
                 };
-            } else {
-                return result;
+            } catch (error) {
+                return {
+                    success: false,
+                    message: `Building error: ${error instanceof Error ? error.message : String(error)}`
+                };
             }
 
         } catch (error) {

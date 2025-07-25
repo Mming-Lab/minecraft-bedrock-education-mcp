@@ -1,8 +1,39 @@
-import { BaseTool } from '../base/tool';
-import { ToolCallResult, InputSchema } from '../../types';
+import { BaseTool } from '../../base/tool';
+import { ToolCallResult, InputSchema } from '../../../types';
 
 /**
- * トーラス（ドーナツ型）を建築するツール
+ * トーラス（ドーナツ型）構造物を建築するツール
+ * 
+ * @description
+ * 指定された中心点、主半径（メジャー半径）、副半径（マイナー半径）からトーラスを建築します。
+ * ドーナツ型、リング型、円形噪水、アリーナ座席などの円筒形構造物に最適で、
+ * 数学的なトーラス方程式を使用して正確な形状を実現します。
+ * 
+ * @extends BaseTool
+ * 
+ * @example
+ * ```typescript
+ * const tool = new BuildTorusTool();
+ * 
+ * // 大型の石のリングを建築
+ * await tool.execute({
+ *   centerX: 0, centerY: 70, centerZ: 0,
+ *   majorRadius: 15, minorRadius: 4,
+ *   material: "stone",
+ *   hollow: false
+ * });
+ * 
+ * // 中空のガラスの装飾リングを建築
+ * await tool.execute({
+ *   centerX: 50, centerY: 80, centerZ: 50,
+ *   majorRadius: 8, minorRadius: 2,
+ *   material: "glass",
+ *   hollow: true
+ * });
+ * ```
+ * 
+ * @since 1.0.0
+ * @author mcbk-mcp contributors
  */
 export class BuildTorusTool extends BaseTool {
     readonly name = 'build_torus';
@@ -48,6 +79,40 @@ export class BuildTorusTool extends BaseTool {
         required: ['centerX', 'centerY', 'centerZ', 'majorRadius', 'minorRadius']
     };
 
+    /**
+     * トーラス（ドーナツ型）構造物を建築します
+     * 
+     * @param args - 建築パラメータ
+     * @param args.centerX - 中心X座標（東西方向の中心位置）
+     * @param args.centerY - 中心Y座標（高さの中心位置）
+     * @param args.centerZ - 中心Z座標（南北方向の中心位置）
+     * @param args.majorRadius - 主半径（リングの大きさ、3-50の範囲）
+     * @param args.minorRadius - 副半径（管の太さ、1-20の範囲、majorRadiusより小さい必要）
+     * @param args.material - 使用するブロック素材（デフォルト: "minecraft:stone"）
+     * @param args.hollow - 中空にするかどうか（デフォルト: false）
+     * @returns 建築実行結果
+     * 
+     * @throws 主半径が範囲外の場合（3-50の範囲外）
+     * @throws 副半径が範囲外の場合（1-20の範囲外）
+     * @throws 副半径が主半径以上の場合
+     * @throws トーラスが有効座標範囲を超える場合
+     * @throws ブロック数が制限を超える場合（5000ブロック超過）
+     * 
+     * @example
+     * ```typescript
+     * // 中空のアリーナ座席を建築
+     * const result = await tool.execute({
+     *   centerX: 0, centerY: 65, centerZ: 0,
+     *   majorRadius: 20, minorRadius: 3,
+     *   material: "stone_brick_stairs",
+     *   hollow: true
+     * });
+     * 
+     * if (result.success) {
+     *   console.log(`トーラス建築完了: ${result.data.blocksPlaced}ブロック配置`);
+     * }
+     * ```
+     */
     async execute(args: {
         centerX: number;
         centerY: number;
@@ -58,6 +123,11 @@ export class BuildTorusTool extends BaseTool {
         hollow?: boolean;
     }): Promise<ToolCallResult> {
         try {
+            // Socket-BE API接続確認
+            if (!this.world) {
+                return { success: false, message: "World not available. Ensure Minecraft is connected." };
+            }
+
             // 引数の基本検証
             if (!args || typeof args !== 'object') {
                 return this.createErrorResponse('Invalid arguments provided');
@@ -167,11 +237,32 @@ export class BuildTorusTool extends BaseTool {
                 return this.createErrorResponse('Too many blocks to place (maximum 8000)');
             }
             
-            const result = await this.executeBatch(commands, false);
-            
-            if (result.success) {
+            try {
+                // Socket-BE APIを使用した実装
+                
+                // 基本的な実装：コマンド配列をSocket-BE API呼び出しに変換
+                for (const command of commands) {
+                    if (command.startsWith('setblock ')) {
+                        const parts = command.split(' ');
+                        if (parts.length >= 5) {
+                            const x = parseInt(parts[1]);
+                            const y = parseInt(parts[2]);
+                            const z = parseInt(parts[3]);
+                            const block = parts[4];
+                            
+                            await this.world.setBlock({x, y, z}, block);
+                            blocksPlaced++;
+                            
+                            // 制限チェック
+                            if (blocksPlaced > 5000) {
+                                return this.createErrorResponse('Too many blocks to place (maximum 5000)');
+                            }
+                        }
+                    }
+                }
+                
                 return this.createSuccessResponse(
-                    `${hollow ? 'Hollow' : 'Solid'} torus built with ${blockId} at center (${center.x},${center.y},${center.z}) major radius ${majorRadiusInt}, minor radius ${minorRadiusInt}`,
+                    `${hollow ? 'Hollow' : 'Solid'} torus built with ${blockId} at center (${center.x},${center.y},${center.z}) major radius ${majorRadiusInt}, minor radius ${minorRadiusInt}. Placed ${blocksPlaced} blocks.`,
                     {
                         type: 'torus',
                         center: center,
@@ -179,11 +270,12 @@ export class BuildTorusTool extends BaseTool {
                         minorRadius: minorRadiusInt,
                         material: blockId,
                         hollow: hollow,
-                        blocksPlaced: blocksPlaced
+                        blocksPlaced: blocksPlaced,
+                        apiUsed: 'Socket-BE'
                     }
                 );
-            } else {
-                return result;
+            } catch (buildError) {
+                return this.createErrorResponse(`Building error: ${buildError instanceof Error ? buildError.message : String(buildError)}`);
             }
 
         } catch (error) {

@@ -1,8 +1,39 @@
-import { BaseTool } from '../base/tool';
-import { ToolCallResult, InputSchema } from '../../types';
+import { BaseTool } from '../../base/tool';
+import { ToolCallResult, InputSchema } from '../../../types';
 
 /**
- * パラボロイド（衛星皿状）を建築するツール
+ * パラボロイド（衛星皿状）構造物を建築するツール
+ * 
+ * @description
+ * 指定された中心点、半径、高さからパラボロイドを建築します。
+ * 衛星アンテナ、ボウル、皿型構造物などの特徴的な形状の構造物に最適で、
+ * 数学的な放物面方程式を使用して正確な曲線を実現します。
+ * 
+ * @extends BaseTool
+ * 
+ * @example
+ * ```typescript
+ * const tool = new BuildParaboloidTool();
+ * 
+ * // 衛星アンテナ型の実体構造を建築
+ * await tool.execute({
+ *   centerX: 0, centerY: 64, centerZ: 0,
+ *   radius: 10, height: 12,
+ *   material: "iron_block",
+ *   hollow: false
+ * });
+ * 
+ * // 中空のボウル型構造を建築
+ * await tool.execute({
+ *   centerX: 50, centerY: 70, centerZ: 50,
+ *   radius: 8, height: 6,
+ *   material: "quartz_block",
+ *   hollow: true
+ * });
+ * ```
+ * 
+ * @since 1.0.0
+ * @author mcbk-mcp contributors
  */
 export class BuildParaboloidTool extends BaseTool {
     readonly name = 'build_paraboloid';
@@ -48,6 +79,39 @@ export class BuildParaboloidTool extends BaseTool {
         required: ['centerX', 'centerY', 'centerZ', 'radius', 'height']
     };
 
+    /**
+     * パラボロイド（衛星皿状）構造物を建築します
+     * 
+     * @param args - 建築パラメータ
+     * @param args.centerX - 中心X座標（東西方向のベース中心位置）
+     * @param args.centerY - 中心Y座標（ベースの高さ、通常64-100）
+     * @param args.centerZ - 中心Z座標（南北方向のベース中心位置）
+     * @param args.radius - 最大半径（パラボロイド上部の半径、2-50の範囲）
+     * @param args.height - パラボロイドの高さ（ブロック単位、1-50の範囲）
+     * @param args.material - 使用するブロック素材（デフォルト: "minecraft:stone"）
+     * @param args.hollow - 中空にするかどうか（デフォルト: false）
+     * @returns 建築実行結果
+     * 
+     * @throws Y座標が範囲外の場合（-64から320の範囲外）
+     * @throws 半径が範囲外の場合（2-50の範囲外）
+     * @throws 高さが範囲外の場合（1-50の範囲外）
+     * @throws ブロック数が制限を超える場合（5000ブロック超過）
+     * 
+     * @example
+     * ```typescript
+     * // 小型の装飾的なボウルを建築
+     * const result = await tool.execute({
+     *   centerX: 0, centerY: 65, centerZ: 0,
+     *   radius: 6, height: 4,
+     *   material: "smooth_quartz",
+     *   hollow: true
+     * });
+     * 
+     * if (result.success) {
+     *   console.log(`パラボロイド建築完了: ${result.data.blocksPlaced}ブロック配置`);
+     * }
+     * ```
+     */
     async execute(args: {
         centerX: number;
         centerY: number;
@@ -58,6 +122,11 @@ export class BuildParaboloidTool extends BaseTool {
         hollow?: boolean;
     }): Promise<ToolCallResult> {
         try {
+            // Socket-BE API接続確認
+            if (!this.world) {
+                return { success: false, message: "World not available. Ensure Minecraft is connected." };
+            }
+
             const { centerX, centerY, centerZ, radius, height, material = 'minecraft:stone', hollow = false } = args;
             
             // 座標の整数化
@@ -148,24 +217,45 @@ export class BuildParaboloidTool extends BaseTool {
                 };
             }
             
-            const result = await this.executeBatch(commands, false);
-            
-            if (result.success) {
-                return {
-                    success: true,
-                    message: `${hollow ? 'Hollow' : 'Solid'} paraboloid built with ${blockId} at center (${center.x},${center.y},${center.z}) with radius ${radiusInt} and height ${heightInt}`,
-                    data: {
+            try {
+                // Socket-BE APIを使用した実装
+                let blocksPlaced = 0;
+                
+                // コマンド配列をSocket-BE API呼び出しに変換
+                for (const command of commands) {
+                    if (command.startsWith('setblock ')) {
+                        const parts = command.split(' ');
+                        if (parts.length >= 5) {
+                            const x = parseInt(parts[1]);
+                            const y = parseInt(parts[2]);
+                            const z = parseInt(parts[3]);
+                            const block = parts[4];
+                            
+                            await this.world.setBlock({x, y, z}, block);
+                            blocksPlaced++;
+                            
+                            if (blocksPlaced > 5000) {
+                                return this.createErrorResponse('Too many blocks to place (maximum 5000)');
+                            }
+                        }
+                    }
+                }
+                
+                return this.createSuccessResponse(
+                    `${hollow ? 'Hollow' : 'Solid'} paraboloid built with ${blockId} at center (${center.x},${center.y},${center.z}) with radius ${radiusInt} and height ${heightInt}. Placed ${blocksPlaced} blocks.`,
+                    {
                         type: 'paraboloid',
                         center: center,
                         radius: radiusInt,
                         height: heightInt,
                         material: blockId,
                         hollow: hollow,
-                        blocksPlaced: blocksPlaced
+                        blocksPlaced: blocksPlaced,
+                        apiUsed: 'Socket-BE'
                     }
-                };
-            } else {
-                return result;
+                );
+            } catch (buildError) {
+                return this.createErrorResponse(`Building error: ${buildError instanceof Error ? buildError.message : String(buildError)}`);
             }
 
         } catch (error) {

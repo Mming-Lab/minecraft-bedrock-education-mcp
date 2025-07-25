@@ -1,41 +1,33 @@
-import WebSocket, { WebSocketServer } from 'ws';
+import { Server as SocketBE, ServerEvent, World, Agent } from 'socket-be';
 import { v4 as uuidv4 } from 'uuid';
 import {
     MCPRequest,
     MCPResponse,
     Tool,
-    MinecraftMessage,
-    MinecraftCommandRequest,
-    MinecraftCommandResponse,
-    MinecraftEncryptRequest,
-    MinecraftEncryptResponse,
     ConnectedPlayer,
     ToolCallResult
 } from './types';
-// レベル1: 基本操作ツール
-import { PlayerPositionTool } from './tools/player/player-position';
-import { PlayerMoveTool } from './tools/player/player-move';
-import { PlayerSayTool } from './tools/player/player-say';
-import { AgentMoveTool } from './tools/agent/agent-move';
-import { AgentTurnTool } from './tools/agent/agent-turn';
-// import { AgentAttackTool } from './tools/agent/agent-attack';
-// import { AgentBlockActionTool } from './tools/agent/agent-block-action';
-import { WorldBlockTool } from './tools/world/world-block';
+// レベル1: 基本操作ツール（Socket-BE移行済み）
 
-// レベル2: 複合操作ツール
-import { BuildCubeTool } from './tools/build/build-cube';
-import { BuildLineTool } from './tools/build/build-line';
-import { BuildSphereTool } from './tools/build/build-sphere';
-import { BuildParaboloidTool } from './tools/build/build-paraboloid';
-import { BuildHyperboloidTool } from './tools/build/build-hyperboloid';
-import { BuildCylinderTool } from './tools/build/build-cylinder';
-import { BuildTorusTool } from './tools/build/build-torus';
-import { BuildHelixTool } from './tools/build/build-helix';
-import { BuildEllipsoidTool } from './tools/build/build-ellipsoid';
-import { BuildRotateTool } from './tools/build/build-rotate';
-import { BuildTransformTool } from './tools/build/build-transform';
-import { WorldFillTool } from './tools/world/world-fill';
-import { WorldTimeWeatherTool } from './tools/world/world-time-weather';
+// Advanced Building ツール
+import { BuildCubeTool } from './tools/advanced/building/build-cube';
+import { BuildLineTool } from './tools/advanced/building/build-line';
+import { BuildSphereTool } from './tools/advanced/building/build-sphere';
+import { BuildParaboloidTool } from './tools/advanced/building/build-paraboloid';
+import { BuildHyperboloidTool } from './tools/advanced/building/build-hyperboloid';
+import { BuildCylinderTool } from './tools/advanced/building/build-cylinder';
+import { BuildTorusTool } from './tools/advanced/building/build-torus';
+import { BuildHelixTool } from './tools/advanced/building/build-helix';
+import { BuildEllipsoidTool } from './tools/advanced/building/build-ellipsoid';
+import { BuildRotateTool } from './tools/advanced/building/build-rotate';
+import { BuildTransformTool } from './tools/advanced/building/build-transform';
+
+// Socket-BE Core API ツール（推奨）
+import { AgentTool } from './tools/core/agent';
+import { WorldTool } from './tools/core/world';
+import { PlayerTool } from './tools/core/player';
+import { BlocksTool } from './tools/core/blocks';
+import { SystemTool } from './tools/core/system';
 
 import { BaseTool } from './tools/base/tool';
 
@@ -69,8 +61,10 @@ import { BaseTool } from './tools/base/tool';
  */
 export class MinecraftMCPServer {
     private connectedPlayer: ConnectedPlayer | null = null;
-    private wss: WebSocketServer | null = null;
+    private socketBE: SocketBE | null = null;
     private tools: BaseTool[] = [];
+    private currentWorld: World | null = null;
+    private currentAgent: Agent | null = null;
 
     /**
      * MCPサーバーを起動します
@@ -91,82 +85,133 @@ export class MinecraftMCPServer {
      * ```
      */
     public start(port: number = 8001): void {
-        this.wss = new WebSocketServer({ port });
+        this.socketBE = new SocketBE({ port });
         
         // MCPモードでない場合のみstderrにログ出力
         if (process.stdin.isTTY !== false) {
-            console.error(`TypeScript Minecraft WebSocketサーバーを起動中 ポート:${port}`);
+            console.error(`SocketBE Minecraft WebSocketサーバーを起動中 ポート:${port}`);
             console.error(`Minecraftから接続: /connect localhost:${port}/ws`);
         }
         
-        this.wss.on('connection', (ws: WebSocket, req) => {
+        this.socketBE.on(ServerEvent.Open, () => {
             if (process.stdin.isTTY !== false) {
-                console.error('新しいWebSocket接続が確立されました');
+                console.error('SocketBEサーバーが開始されました');
+            }
+            
+            // 代替手段: 10秒後に強制的にワールドとエージェントを設定（ワールド登録待ち）
+            setTimeout(async () => {
+                try {
+                    // Socket-BEからワールドを取得
+                    const worlds = this.socketBE?.worlds;
+                    if (worlds && worlds instanceof Map && worlds.size > 0) {
+                        this.currentWorld = Array.from(worlds.values())[0];
+                        
+                        // エージェントを取得
+                        try {
+                            if (this.currentWorld) {
+                                this.currentAgent = await this.currentWorld.getOrCreateAgent();
+                            }
+                        } catch (agentError) {
+                            // エージェント取得に失敗してもサーバーは継続
+                        }
+                        
+                        // 仮のプレイヤー情報を設定
+                        this.connectedPlayer = {
+                            ws: null,
+                            name: 'MinecraftPlayer',
+                            id: uuidv4()
+                        };
+                        
+                        // 全ツールにSocket-BEインスタンスを設定
+                        this.tools.forEach(tool => {
+                            tool.setSocketBEInstances(this.currentWorld, this.currentAgent);
+                        });
+                        
+                        // Minecraft側に接続確認メッセージを送信
+                        try {
+                            await this.currentWorld.sendMessage('§a[MCP Server] 接続完了！AIツールが利用可能になりました。');
+                        } catch (messageError) {
+                            // メッセージ送信失敗は無視
+                        }
+                    }
+                } catch (error) {
+                    // 強制設定失敗は無視してサーバー継続
+                }
+            }, 10000);
+            
+            // 定期的なワールドチェック（30秒ごと）
+            setInterval(async () => {
+                if (!this.currentWorld && this.socketBE) {
+                    const worlds = this.socketBE.worlds;
+                    if (worlds instanceof Map && worlds.size > 0) {
+                        this.currentWorld = Array.from(worlds.values())[0];
+                        
+                        try {
+                            if (this.currentWorld) {
+                                this.currentAgent = await this.currentWorld.getOrCreateAgent();
+                                this.tools.forEach(tool => {
+                                    tool.setSocketBEInstances(this.currentWorld, this.currentAgent);
+                                });
+                                await this.currentWorld.sendMessage('§a[MCP Server] 遅延接続完了！AIツールが利用可能になりました。');
+                            }
+                        } catch (delayedError) {
+                            // 遅延設定失敗は無視
+                        }
+                    }
+                }
+            }, 30000);
+        });
+        
+        
+        this.socketBE.on(ServerEvent.PlayerJoin, async (ev: any) => {
+            if (process.stdin.isTTY !== false) {
+                console.error('新しいプレイヤーが参加しました:', ev.player.name);
+            }
+            
+            // Minecraft側に参加確認メッセージを送信
+            try {
+                await ev.world.sendMessage(`§b[MCP Server] §f${ev.player.name}さん、ようこそ！AIアシスタントが利用可能です。`);
+            } catch (messageError) {
+                // メッセージ送信失敗は無視
             }
             
             this.connectedPlayer = {
-                ws: ws,
-                name: 'unknown',
+                ws: null, // SocketBEではws直接アクセス不要
+                name: ev.player.name || 'unknown',
                 id: uuidv4()
             };
             
-            ws.on('message', (data: Buffer) => {
-                try {
-                    const message: MinecraftMessage = JSON.parse(data.toString());
-                    this.handleMinecraftMessage(ws, message);
-                } catch (error) {
-                    if (process.stdin.isTTY !== false) {
-                        console.error('JSON以外のメッセージを受信:', data.toString());
-                    }
+            this.currentWorld = ev.world;
+            
+            // エージェントを取得
+            try {
+                if (this.currentWorld) {
+                    this.currentAgent = await this.currentWorld.getOrCreateAgent();
                 }
+            } catch (error) {
+                console.error('Failed to get or create agent:', error);
+                this.currentAgent = null;
+            }
+            
+            // 全ツールのSocket-BEインスタンスを更新
+            this.tools.forEach(tool => {
+                tool.setSocketBEInstances(this.currentWorld, this.currentAgent);
             });
             
-            ws.on('close', (code: number, reason: Buffer) => {
-                if (process.stdin.isTTY !== false) {
-                    console.error(`プレイヤーが切断されました: code=${code}, reason=${reason.toString()}`);
-                }
-                this.connectedPlayer = null;
-            });
+        });
+        
+        this.socketBE.on(ServerEvent.PlayerLeave, (ev: any) => {
+            if (process.stdin.isTTY !== false) {
+                console.error(`プレイヤーが切断されました: ${ev.player.name}`);
+            }
+            this.connectedPlayer = null;
+            this.currentWorld = null;
+            this.currentAgent = null;
             
-            ws.on('error', (error: Error) => {
-                if (process.stdin.isTTY !== false) {
-                    console.error('WebSocketエラー:', error);
-                }
+            // 全ツールのSocket-BEインスタンスをクリア
+            this.tools.forEach(tool => {
+                tool.setSocketBEInstances(null, null);
             });
-            
-            // 接続後にプレイヤー情報をリクエスト
-            setTimeout(() => {
-                if (this.connectedPlayer) {
-                    const getPlayerMessage: MinecraftCommandRequest = {
-                        header: {
-                            version: 1,
-                            requestId: 'getplayer-' + uuidv4(),
-                            messagePurpose: 'commandRequest'
-                        },
-                        body: {
-                            origin: { type: 'player' },
-                            commandLine: 'getlocalplayername',
-                            version: 1
-                        }
-                    };
-                    
-                    ws.send(JSON.stringify(getPlayerMessage));
-                    
-                    // 自動レスポンステストの実行
-                    const autoTest = process.argv.includes('--auto-test') || process.env.AUTO_RESPONSE_TEST === 'true';
-                    console.error(`DEBUG: 自動テストフラグ = ${autoTest}`);
-                    if (autoTest) {
-                        console.error('自動レスポンステストを開始します...');
-                        setTimeout(() => {
-                            this.runResponseTests().catch(error => {
-                                console.error('自動テストエラー:', error);
-                            });
-                        }, 2000); // 接続安定化のため少し待機
-                    } else {
-                        console.error('自動レスポンステストは無効です');
-                    }
-                }
-            }, 1000);
         });
         
         // MCP stdin処理
@@ -186,87 +231,40 @@ export class MinecraftMCPServer {
      */
     private initializeTools(): void {
         this.tools = [
-            // レベル1: 基本操作ツール
-            new PlayerPositionTool(),
-            new PlayerMoveTool(),
-            new PlayerSayTool(),
-            new AgentMoveTool(),
-            new AgentTurnTool(),
-            // new AgentAttackTool(),     // エージェントでは使用不可
-            // new AgentBlockActionTool(), // エージェントでは使用不可
-            new WorldBlockTool(),
+            // Socket-BE Core API ツール（推奨 - シンプルでAI使いやすい）
+            new AgentTool(),
+            new WorldTool(),
+            new PlayerTool(),
+            new BlocksTool(),
+            new SystemTool(),
             
-            // レベル2: 複合操作ツール
-            new BuildCubeTool(),
-            new BuildLineTool(),
-            new BuildSphereTool(),
-            new BuildParaboloidTool(),
-            new BuildHyperboloidTool(),
-            new BuildCylinderTool(),
-            new BuildTorusTool(),
-            new BuildHelixTool(),
-            new BuildEllipsoidTool(),
-            new BuildRotateTool(),
-            new BuildTransformTool(),
-            new WorldFillTool(),
-            new WorldTimeWeatherTool()
+            // Advanced Building ツール（高レベル建築機能）
+            new BuildCubeTool(),           // ✅ 完全動作
+            new BuildLineTool(),           // ✅ 完全動作
+            new BuildSphereTool(),         // ✅ 完全動作
+            new BuildCylinderTool(),       // ✅ 修正済み
+            new BuildParaboloidTool(),     // ✅ 基本動作
+            new BuildHyperboloidTool(),    // ✅ 基本動作
+            new BuildRotateTool(),         // ✅ 基本動作
+            new BuildTransformTool(),      // ✅ 基本動作
+            new BuildTorusTool(),          // ✅ 修正完了
+            new BuildHelixTool(),          // ✅ 修正完了  
+            new BuildEllipsoidTool(),      // ✅ 修正完了
+            
         ];
         
-        // 全ツールにコマンド実行関数を設定
+        // 全ツールにコマンド実行関数とSocket-BEインスタンスを設定
         const commandExecutor = async (command: string): Promise<ToolCallResult> => {
             return this.executeCommand(command);
         };
         
         this.tools.forEach(tool => {
             tool.setCommandExecutor(commandExecutor);
+            tool.setSocketBEInstances(this.currentWorld, this.currentAgent);
         });
     }
     
     private lastCommandResponse: any = null;
-
-    private handleMinecraftMessage(ws: WebSocket, message: MinecraftMessage): void {
-        if (message.header?.messagePurpose === 'ws:encrypt') {
-            if (process.stdin.isTTY !== false) {
-                console.error('=== 暗号化処理中 ===');
-            }
-            
-            const encryptResponse: MinecraftEncryptResponse = {
-                header: {
-                    version: 1,
-                    requestId: message.header.requestId || uuidv4(),
-                    messagePurpose: 'ws:encrypt'
-                },
-                body: {
-                    publicKey: ''  // 空キーは暗号化なしを意味
-                }
-            };
-            
-            ws.send(JSON.stringify(encryptResponse));
-            return;
-        }
-        
-        if (message.header?.messagePurpose === 'commandResponse') {
-            if (process.stdin.isTTY !== false) {
-                console.error('コマンドレスポンス受信:');
-                console.error('リクエストID:', message.header.requestId);
-                console.error('ステータスコード:', (message.body as any)?.statusCode);
-                console.error('ステータスメッセージ:', (message.body as any)?.statusMessage);
-                console.error('完全なレスポンス:', JSON.stringify(message, null, 2));
-            }
-            
-            // プレイヤー名が利用可能な場合は更新
-            const commandResponse = message as MinecraftCommandResponse;
-            if (commandResponse.body?.localplayername && this.connectedPlayer) {
-                this.connectedPlayer.name = commandResponse.body.localplayername;
-                if (process.stdin.isTTY !== false) {
-                    console.error(`プレイヤーを識別: ${this.connectedPlayer.name}`);
-                }
-            }
-            
-            // 最新のコマンドレスポンスを保存（位置情報取得用）
-            this.lastCommandResponse = commandResponse.body;
-        }
-    }
     
     /**
      * 接続中のMinecraftプレイヤーにメッセージを送信します
@@ -282,37 +280,27 @@ export class MinecraftMCPServer {
      * }
      * ```
      */
-    public sendMessage(text: string): ToolCallResult {
-        if (!this.connectedPlayer?.ws) {
+    public async sendMessage(text: string): Promise<ToolCallResult> {
+        if (!this.currentWorld) {
             if (process.stdin.isTTY !== false) {
                 console.error('エラー: プレイヤーが接続されていません');
             }
             return { success: false, message: 'No player connected' };
         }
         
-        const requestId = uuidv4();
-        const message: MinecraftCommandRequest = {
-            header: {
-                version: 1,
-                requestId: requestId,
-                messagePurpose: 'commandRequest'
-            },
-            body: {
-                origin: { type: 'player' },
-                commandLine: `say ${text}`,
-                version: 1
+        try {
+            if (process.stdin.isTTY !== false) {
+                console.error(`メッセージ送信: ${text}`);
             }
-        };
-        
-        if (process.stdin.isTTY !== false) {
-            console.error(`メッセージ送信: ${text}`);
-            console.error(`コマンド: say ${text}`);
-            console.error(`リクエストID: ${requestId}`);
-            console.error('完全なメッセージ:', JSON.stringify(message, null, 2));
+            
+            await this.currentWorld.sendMessage(text);
+            return { success: true, message: 'Message sent successfully' };
+        } catch (error) {
+            if (process.stdin.isTTY !== false) {
+                console.error('メッセージ送信エラー:', error);
+            }
+            return { success: false, message: `Failed to send message: ${error}` };
         }
-        
-        this.connectedPlayer.ws.send(JSON.stringify(message));
-        return { success: true, message: 'Message sent successfully' };
     }
     
     /**
@@ -331,68 +319,25 @@ export class MinecraftMCPServer {
      * ```
      */
     public async executeCommand(command: string): Promise<ToolCallResult> {
-        if (!this.connectedPlayer?.ws) {
+        if (!this.currentWorld) {
             return { success: false, message: 'No player connected' };
         }
         
-        const requestId = uuidv4();
-        const message: MinecraftCommandRequest = {
-            header: {
-                version: 1,
-                requestId: requestId,
-                messagePurpose: 'commandRequest'
-            },
-            body: {
-                origin: { type: 'player' },
-                commandLine: command,
-                version: 1
-            }
-        };
-        
-        // querytargetコマンドの場合は特別なレスポンス処理
-        if (command.startsWith('querytarget')) {
-            return new Promise((resolve) => {
-                // レスポンス待機用のタイムアウト
-                const timeout = setTimeout(() => {
-                    resolve({
-                        success: false,
-                        message: 'QueryTarget command timed out'
-                    });
-                }, 5000);
-                
-                // 一時的なレスポンスハンドラーを設定
-                const originalHandler = this.lastCommandResponse;
-                
-                // レスポンス監視
-                const checkResponse = () => {
-                    if (this.lastCommandResponse && this.lastCommandResponse !== originalHandler) {
-                        clearTimeout(timeout);
-                        const responseData = this.lastCommandResponse;
-                        
-                        resolve({
-                            success: true,
-                            message: 'QueryTarget command executed',
-                            data: responseData
-                        });
-                    } else {
-                        // まだレスポンスが来ていない場合は再チェック
-                        setTimeout(checkResponse, 100);
-                    }
-                };
-                
-                // コマンド送信
-                this.connectedPlayer!.ws.send(JSON.stringify(message));
-                
-                // レスポンス監視開始
-                setTimeout(checkResponse, 100);
-            });
-        } else {
-            // 通常のコマンド処理
-            this.connectedPlayer.ws.send(JSON.stringify(message));
+        try {
+            const result = await this.currentWorld.runCommand(command);
+            
+            // レスポンスをlastCommandResponseに保存（位置情報取得などで使用）
+            this.lastCommandResponse = result;
+            
             return { 
                 success: true, 
                 message: 'Command executed successfully',
-                data: { requestId: requestId }
+                data: result
+            };
+        } catch (error) {
+            return { 
+                success: false, 
+                message: `Command execution failed: ${error}`
             };
         }
     }
@@ -404,141 +349,11 @@ export class MinecraftMCPServer {
         return this.lastCommandResponse;
     }
 
-    /**
-     * Minecraft接続セッション内で自動レスポンステストを実行
-     */
-    private async runResponseTests(): Promise<void> {
-        console.error('\n=== 自動レスポンステスト開始 ===');
-        
-        // プレイヤー名を取得（@sの代わりに使用）
-        const playerName = this.connectedPlayer?.name || '@p';
-        
-        const testCommands = [
-            { name: 'QueryTarget', cmd: 'querytarget @s', critical: true },
-            { name: 'TestFor', cmd: 'testfor @s', critical: true },
-            { name: 'TimeQuery', cmd: 'time query daytime', critical: false },
-            { name: 'List', cmd: 'list', critical: false }
-        ];
-        
-        let testResults: any[] = [];
-        
-        for (const test of testCommands) {
-            try {
-                console.error(`\n📋 ${test.name} テスト実行中...`);
-                
-                const result = await this.executeCommand(test.cmd);
-                
-                // レスポンス詳細検証
-                let isSuccess = false;
-                let errorReason = '';
-                
-                if (result.success && result.data) {
-                    // ステータスコードによる成功判定
-                    const statusCode = result.data.statusCode;
-                    
-                    if (typeof statusCode === 'number') {
-                        if (statusCode >= 0) {
-                            isSuccess = true;
-                        } else {
-                            errorReason = `エラーステータス: ${statusCode}`;
-                        }
-                    } else {
-                        // ステータスコードがない場合は基本的に成功扱い（QueryTargetなど）
-                        isSuccess = true;
-                    }
-                    
-                    // 成功した場合の詳細表示
-                    if (isSuccess) {
-                        console.error(`✅ ${test.name}: 成功`);
-                        
-                        // QueryTargetの特別な検証
-                        if (test.name === 'QueryTarget') {
-                            try {
-                                const details = result.data.details || result.data.statusMessage;
-                                if (details) {
-                                    const playerData = JSON.parse(details);
-                                    if (Array.isArray(playerData) && playerData[0]?.position) {
-                                        const pos = playerData[0].position;
-                                        console.error(`   位置: X=${pos.x}, Y=${pos.y}, Z=${pos.z}`);
-                                        console.error(`   回転: ${playerData[0].yRot}°`);
-                                    } else {
-                                        console.error(`   ⚠️ 位置データの解析に失敗`);
-                                        isSuccess = false;
-                                        errorReason = '位置データ解析失敗';
-                                    }
-                                } else {
-                                    isSuccess = false;
-                                    errorReason = 'QueryTargetレスポンスにdetailsなし';
-                                }
-                            } catch (e) {
-                                console.error(`   ❌ JSON解析エラー: ${e instanceof Error ? e.message : String(e)}`);
-                                isSuccess = false;
-                                errorReason = 'JSON解析エラー';
-                            }
-                        } else {
-                            // 他のコマンドの基本情報表示
-                            if (result.data.statusCode !== undefined) {
-                                console.error(`   ステータス: ${result.data.statusCode}`);
-                                if (result.data.statusMessage) {
-                                    console.error(`   メッセージ: ${result.data.statusMessage}`);
-                                }
-                            }
-                        }
-                    } else {
-                        console.error(`❌ ${test.name}: 失敗 - ${errorReason}`);
-                        if (result.data.statusMessage) {
-                            console.error(`   エラー詳細: ${result.data.statusMessage}`);
-                        }
-                    }
-                    
-                    testResults.push({ 
-                        test: test.name, 
-                        success: isSuccess, 
-                        data: result.data,
-                        error: isSuccess ? undefined : errorReason
-                    });
-                } else {
-                    console.error(`❌ ${test.name}: 失敗 - ${result.message}`);
-                    testResults.push({ 
-                        test: test.name, 
-                        success: false, 
-                        error: result.message 
-                    });
-                }
-                
-                // テスト間隔
-                await new Promise(resolve => setTimeout(resolve, 1000));
-                
-            } catch (error) {
-                console.error(`❌ ${test.name}: エラー - ${error instanceof Error ? error.message : String(error)}`);
-                testResults.push({ 
-                    test: test.name, 
-                    success: false, 
-                    error: error instanceof Error ? error.message : String(error)
-                });
-            }
-        }
-        
-        // テスト結果サマリー
-        const passed = testResults.filter(r => r.success).length;
-        const total = testResults.length;
-        const successRate = ((passed / total) * 100).toFixed(1);
-        
-        console.error('\n=== テスト結果サマリー ===');
-        console.error(`成功率: ${successRate}% (${passed}/${total})`);
-        
-        const criticalFailed = testResults.filter(r => 
-            !r.success && testCommands.find(t => t.name === r.test)?.critical
-        );
-        
-        if (criticalFailed.length > 0) {
-            console.error('⚠️ 重要なコマンドが失敗しています:');
-            criticalFailed.forEach(f => console.error(`  - ${f.test}`));
-        }
-        
-        console.error('=== レスポンステスト完了 ===\n');
-    }
     
+    /**
+     * MCPインターフェースを設定します
+     * Claude Desktop等のMCPクライアントとの通信を初期化
+     */
     private setupMCPInterface(): void {
         // Claude Desktop用にMCPインターフェースを常に設定
         process.stdin.setEncoding('utf8');
@@ -647,6 +462,11 @@ export class MinecraftMCPServer {
         }
     }
     
+    /**
+     * 利用可能なツール一覧を取得します
+     * MCPクライアントにツール情報を提供
+     * @returns ツール定義の配列
+     */
     private getTools(): Tool[] {
         const basicTools: Tool[] = [
             {
@@ -689,16 +509,16 @@ export class MinecraftMCPServer {
         return [...basicTools, ...modularTools];
     }
     
+    /**
+     * ツール実行リクエストを処理します
+     * MCPクライアントからのツール呼び出しを受け取り、適切なツールに委譲
+     * @param request - MCPツール実行リクエスト
+     * @returns ツール実行結果のMCPレスポンス
+     */
     private async handleToolCall(request: MCPRequest): Promise<MCPResponse> {
         try {
-            // パラメータ構造の確認とデバッグ
-            console.error('Tool call params:', JSON.stringify(request.params, null, 2));
-            
             const toolName = request.params?.name;
             const args = request.params?.arguments || request.params?.args || {};
-            
-            console.error('Extracted toolName:', toolName);
-            console.error('Extracted args:', JSON.stringify(args, null, 2));
             
             if (!toolName) {
                 return {
@@ -722,7 +542,7 @@ export class MinecraftMCPServer {
                         error: { code: -32602, message: 'Message parameter is required and cannot be empty' }
                     };
                 }
-                result = this.sendMessage(message);
+                result = await this.sendMessage(message);
         } else if (toolName === 'execute_command') {
             result = await this.executeCommand(args.command);
         } else {

@@ -1,4 +1,5 @@
 import { Tool, InputSchema, ToolCallResult } from '../../types';
+import { World, Agent } from 'socket-be';
 
 /**
  * 全てのMinecraft制御ツールの抽象基底クラス
@@ -33,6 +34,8 @@ export abstract class BaseTool implements Tool {
     abstract readonly description: string;
     abstract readonly inputSchema: InputSchema;
     
+    protected world: World | null = null;
+    protected agent: Agent | null = null;
     private commandExecutor?: (command: string) => Promise<ToolCallResult>;
 
     constructor() {}
@@ -90,7 +93,15 @@ export abstract class BaseTool implements Tool {
     }
 
     /**
-     * コマンド実行関数の設定
+     * Socket-BE World/Agentインスタンスの設定
+     */
+    public setSocketBEInstances(world: World | null, agent: Agent | null): void {
+        this.world = world;
+        this.agent = agent;
+    }
+
+    /**
+     * コマンド実行関数の設定（後方互換性のため）
      */
     public setCommandExecutor(executor: (command: string) => Promise<ToolCallResult>): void {
         this.commandExecutor = executor;

@@ -1,8 +1,39 @@
-import { BaseTool } from '../base/tool';
-import { ToolCallResult, InputSchema } from '../../types';
+import { BaseTool } from '../../base/tool';
+import { ToolCallResult, InputSchema } from '../../../types';
 
 /**
- * 円柱を建築するツール
+ * 円柱構造物を建築するツール
+ * 
+ * @description
+ * 指定された中心点、半径、高さから円柱構造物を建築します。
+ * タワー、柱、煙突、パイプなどの円筒形構造物に最適で、
+ * X、Y、Z軸のいずれの方向へも伸ばすことが可能です。
+ * 
+ * @extends BaseTool
+ * 
+ * @example
+ * ```typescript
+ * const tool = new BuildCylinderTool();
+ * 
+ * // 縦方向の石のタワーを建築
+ * await tool.execute({
+ *   centerX: 0, centerY: 64, centerZ: 0,
+ *   radius: 5, height: 20,
+ *   material: "stone",
+ *   hollow: false, axis: "y"
+ * });
+ * 
+ * // 水平方向の中空パイプを建築
+ * await tool.execute({
+ *   centerX: 20, centerY: 70, centerZ: 20,
+ *   radius: 3, height: 15,
+ *   material: "iron_block",
+ *   hollow: true, axis: "x"
+ * });
+ * ```
+ * 
+ * @since 1.0.0
+ * @author mcbk-mcp contributors
  */
 export class BuildCylinderTool extends BaseTool {
     readonly name = 'build_cylinder';
@@ -54,6 +85,41 @@ export class BuildCylinderTool extends BaseTool {
         required: ['centerX', 'centerY', 'centerZ', 'radius', 'height']
     };
 
+    /**
+     * 円柱構造物を建築します
+     * 
+     * @param args - 建築パラメータ
+     * @param args.centerX - 中心X座標（東西方向の中心位置）
+     * @param args.centerY - 中心Y座標（高さ、通常64が地上レベル）
+     * @param args.centerZ - 中心Z座標（南北方向の中心位置）
+     * @param args.radius - 円柱の半径（ブロック単位、1-30の範囲）
+     * @param args.height - 円柱の高さ（ブロック単位、1-50の範囲）
+     * @param args.material - 使用するブロック素材（デフォルト: "minecraft:stone"）
+     * @param args.hollow - 中空にするかどうか（デフォルト: false）
+     * @param args.axis - 円柱の伸びる方向（"y": 縦、"x": 東西、"z": 南北、デフォルト: "y"）
+     * @returns 建築実行結果
+     * 
+     * @throws 半径が範囲外の場合（1-30の範囲外）
+     * @throws 高さが範囲外の場合（1-50の範囲外）
+     * @throws axisが無効な値の場合
+     * @throws 円柱が有効座標範囲を超える場合
+     * @throws ブロック数が制限を超える場合（5000ブロック超過）
+     * 
+     * @example
+     * ```typescript
+     * // 中空の高いタワーを建築
+     * const result = await tool.execute({
+     *   centerX: 100, centerY: 64, centerZ: 100,
+     *   radius: 8, height: 30,
+     *   material: "cobblestone",
+     *   hollow: true, axis: "y"
+     * });
+     * 
+     * if (result.success) {
+     *   console.log(`円柱建築完了: ${result.data.blocksPlaced}ブロック配置`);
+     * }
+     * ```
+     */
     async execute(args: {
         centerX: number;
         centerY: number;
@@ -65,6 +131,11 @@ export class BuildCylinderTool extends BaseTool {
         axis?: string;
     }): Promise<ToolCallResult> {
         try {
+            // Socket-BE API接続確認
+            if (!this.world) {
+                return { success: false, message: "World not available. Ensure Minecraft is connected." };
+            }
+
             // 引数の基本検証
             if (!args || typeof args !== 'object') {
                 return this.createErrorResponse('Invalid arguments provided');
@@ -186,11 +257,33 @@ export class BuildCylinderTool extends BaseTool {
                 return this.createErrorResponse('Too many blocks to place (maximum 10000)');
             }
             
-            const result = await this.executeBatch(commands, false);
-            
-            if (result.success) {
+            try {
+                // Socket-BE APIを使用した実装
+                let blocksPlaced = 0;
+                
+                // 基本的な実装：コマンド配列をSocket-BE API呼び出しに変換
+                for (const command of commands) {
+                    if (command.startsWith('setblock ')) {
+                        const parts = command.split(' ');
+                        if (parts.length >= 5) {
+                            const x = parseInt(parts[1]);
+                            const y = parseInt(parts[2]);
+                            const z = parseInt(parts[3]);
+                            const block = parts[4];
+                            
+                            await this.world.setBlock({x, y, z}, block);
+                            blocksPlaced++;
+                            
+                            // 制限チェック
+                            if (blocksPlaced > 5000) {
+                                return this.createErrorResponse('Too many blocks to place (maximum 5000)');
+                            }
+                        }
+                    }
+                }
+                
                 return this.createSuccessResponse(
-                    `${hollow ? 'Hollow' : 'Solid'} cylinder built with ${blockId} at center (${center.x},${center.y},${center.z}) radius ${radiusInt}, height ${heightInt}, axis ${axis}`,
+                    `${hollow ? 'Hollow' : 'Solid'} cylinder built with ${blockId} at center (${center.x},${center.y},${center.z}) radius ${radiusInt}, height ${heightInt}, axis ${axis}. Placed ${blocksPlaced} blocks.`,
                     {
                         type: 'cylinder',
                         center: center,
@@ -199,11 +292,12 @@ export class BuildCylinderTool extends BaseTool {
                         material: blockId,
                         hollow: hollow,
                         axis: axis,
-                        blocksPlaced: blocksPlaced
+                        blocksPlaced: blocksPlaced,
+                        apiUsed: 'Socket-BE'
                     }
                 );
-            } else {
-                return result;
+            } catch (buildError) {
+                return this.createErrorResponse(`Building error: ${buildError instanceof Error ? buildError.message : String(buildError)}`);
             }
 
         } catch (error) {

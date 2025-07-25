@@ -1,8 +1,39 @@
-import { BaseTool } from '../base/tool';
-import { ToolCallResult, InputSchema } from '../../types';
+import { BaseTool } from '../../base/tool';
+import { ToolCallResult, InputSchema } from '../../../types';
 
 /**
- * ヘリックス（螺旋）を建築するツール
+ * ヘリックス（螺旋）構造物を建築するツール
+ * 
+ * @description
+ * 指定された中心点、半径、高さ、回転数から螺旋状の構造物を建築します。
+ * 螺旋階段、DNAモデル、コルクスクリュータワーなどの螺旋形構造物に最適で、
+ * Bresenhamアルゴリズムを応用した3D螺旋描画で連続した構造を実現します。
+ * 
+ * @extends BaseTool
+ * 
+ * @example
+ * ```typescript
+ * const tool = new BuildHelixTool();
+ * 
+ * // 時計回りの螺旋階段を建築
+ * await tool.execute({
+ *   centerX: 0, centerY: 64, centerZ: 0,
+ *   radius: 5, height: 20, turns: 3,
+ *   material: "oak_stairs",
+ *   clockwise: true
+ * });
+ * 
+ * // 反時計回りのDNAモデルを建築
+ * await tool.execute({
+ *   centerX: 50, centerY: 70, centerZ: 50,
+ *   radius: 3, height: 15, turns: 2.5,
+ *   material: "glowstone",
+ *   clockwise: false
+ * });
+ * ```
+ * 
+ * @since 1.0.0
+ * @author mcbk-mcp contributors
  */
 export class BuildHelixTool extends BaseTool {
     readonly name = 'build_helix';
@@ -54,6 +85,41 @@ export class BuildHelixTool extends BaseTool {
         required: ['centerX', 'centerY', 'centerZ', 'radius', 'height', 'turns']
     };
 
+    /**
+     * ヘリックス（螺旋）構造物を建築します
+     * 
+     * @param args - 建築パラメータ
+     * @param args.centerX - 中心X座標（東西方向の中心位置）
+     * @param args.centerY - 中心Y座標（開始高座、螺旋の最下部）
+     * @param args.centerZ - 中心Z座標（南北方向の中心位置）
+     * @param args.radius - 螺旋の半径（中心からの距離、1-50の範囲）
+     * @param args.height - 螺旋の高さ（全体の高さ、2-100の範囲）
+     * @param args.turns - 完全回転数（0.5-20の範囲、0.5は半回転）
+     * @param args.material - 使用するブロック素材（デフォルト: "minecraft:stone"）
+     * @param args.clockwise - 回転方向（true: 時計回り、false: 反時計回り、デフォルト: true）
+     * @returns 建築実行結果
+     * 
+     * @throws 半径が範囲外の場合（1-50の範囲外）
+     * @throws 高さが範囲外の場合（2-100の範囲外）
+     * @throws 回転数が範囲外の場合（0.5-20の範囲外）
+     * @throws ヘリックスが有効座標範囲を超える場合
+     * @throws ブロック数が制限を超える場合（5000ブロック超過）
+     * 
+     * @example
+     * ```typescript
+     * // 緊密な螺旋タワーを建築
+     * const result = await tool.execute({
+     *   centerX: 100, centerY: 64, centerZ: 100,
+     *   radius: 4, height: 25, turns: 5,
+     *   material: "cobblestone",
+     *   clockwise: true
+     * });
+     * 
+     * if (result.success) {
+     *   console.log(`ヘリックス建築完了: ${result.data.blocksPlaced}ブロック配置`);
+     * }
+     * ```
+     */
     async execute(args: {
         centerX: number;
         centerY: number;
@@ -65,6 +131,11 @@ export class BuildHelixTool extends BaseTool {
         clockwise?: boolean;
     }): Promise<ToolCallResult> {
         try {
+            // Socket-BE API接続確認
+            if (!this.world) {
+                return { success: false, message: "World not available. Ensure Minecraft is connected." };
+            }
+
             // 引数の基本検証
             if (!args || typeof args !== 'object') {
                 return this.createErrorResponse('Invalid arguments provided');
@@ -222,11 +293,32 @@ export class BuildHelixTool extends BaseTool {
                 return this.createErrorResponse('Too many blocks to place (maximum 3000)');
             }
             
-            const result = await this.executeBatch(commands, false);
-            
-            if (result.success) {
+            try {
+                // Socket-BE APIを使用した実装
+                
+                // 基本的な実装：コマンド配列をSocket-BE API呼び出しに変換
+                for (const command of commands) {
+                    if (command.startsWith('setblock ')) {
+                        const parts = command.split(' ');
+                        if (parts.length >= 5) {
+                            const x = parseInt(parts[1]);
+                            const y = parseInt(parts[2]);
+                            const z = parseInt(parts[3]);
+                            const block = parts[4];
+                            
+                            await this.world.setBlock({x, y, z}, block);
+                            blocksPlaced++;
+                            
+                            // 制限チェック
+                            if (blocksPlaced > 5000) {
+                                return this.createErrorResponse('Too many blocks to place (maximum 5000)');
+                            }
+                        }
+                    }
+                }
+                
                 return this.createSuccessResponse(
-                    `Helix built with ${blockId} at center (${center.x},${center.y},${center.z}) radius ${radiusInt}, height ${heightInt}, ${turns} turns, ${clockwise ? 'clockwise' : 'counter-clockwise'}`,
+                    `Helix built with ${blockId} at center (${center.x},${center.y},${center.z}) radius ${radiusInt}, height ${heightInt}, ${turns} turns, ${clockwise ? 'clockwise' : 'counter-clockwise'}. Placed ${blocksPlaced} blocks.`,
                     {
                         type: 'helix',
                         center: center,
@@ -235,11 +327,12 @@ export class BuildHelixTool extends BaseTool {
                         turns: turns,
                         material: blockId,
                         clockwise: clockwise,
-                        blocksPlaced: blocksPlaced
+                        blocksPlaced: blocksPlaced,
+                        apiUsed: 'Socket-BE'
                     }
                 );
-            } else {
-                return result;
+            } catch (buildError) {
+                return this.createErrorResponse(`Building error: ${buildError instanceof Error ? buildError.message : String(buildError)}`);
             }
 
         } catch (error) {

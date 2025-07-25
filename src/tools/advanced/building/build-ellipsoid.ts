@@ -1,8 +1,39 @@
-import { BaseTool } from '../base/tool';
-import { ToolCallResult, InputSchema } from '../../types';
+import { BaseTool } from '../../base/tool';
+import { ToolCallResult, InputSchema } from '../../../types';
 
 /**
- * 楕円体を建築するツール
+ * 楕円体構造物を建築するツール
+ * 
+ * @description
+ * 指定された中心点とX、Y、Z軸の各半径から楕円体を建築します。
+ * 球体と異なり、各軸方向に異なる半径を持つことで、
+ * 卵型、平たいドーム、引き伸ばされた球などの独特な形状を作成できます。
+ * 
+ * @extends BaseTool
+ * 
+ * @example
+ * ```typescript
+ * const tool = new BuildEllipsoidTool();
+ * 
+ * // 平たいドームを建築
+ * await tool.execute({
+ *   centerX: 0, centerY: 70, centerZ: 0,
+ *   radiusX: 10, radiusY: 5, radiusZ: 10,
+ *   material: "glass",
+ *   hollow: true
+ * });
+ * 
+ * // 卵型の実体構造物を建築
+ * await tool.execute({
+ *   centerX: 50, centerY: 80, centerZ: 50,
+ *   radiusX: 6, radiusY: 12, radiusZ: 8,
+ *   material: "concrete",
+ *   hollow: false
+ * });
+ * ```
+ * 
+ * @since 1.0.0
+ * @author mcbk-mcp contributors
  */
 export class BuildEllipsoidTool extends BaseTool {
     readonly name = 'build_ellipsoid';
@@ -54,6 +85,41 @@ export class BuildEllipsoidTool extends BaseTool {
         required: ['centerX', 'centerY', 'centerZ', 'radiusX', 'radiusY', 'radiusZ']
     };
 
+    /**
+     * 楕円体構造物を建築します
+     * 
+     * @param args - 建築パラメータ
+     * @param args.centerX - 中心X座標（東西方向の中心位置）
+     * @param args.centerY - 中心Y座標（高さの中心位置）
+     * @param args.centerZ - 中心Z座標（南北方向の中心位置）
+     * @param args.radiusX - X軸方向の半径（幅の半分、1-50の範囲）
+     * @param args.radiusY - Y軸方向の半径（高さの半分、1-50の範囲）
+     * @param args.radiusZ - Z軸方向の半径（奥行きの半分、1-50の範囲）
+     * @param args.material - 使用するブロック素材（デフォルト: "minecraft:stone"）
+     * @param args.hollow - 中空にするかどうか（デフォルト: false）
+     * @returns 建築実行結果
+     * 
+     * @throws X軸半径が範囲外の場合（1-50の範囲外）
+     * @throws Y軸半径が範囲外の場合（1-50の範囲外）
+     * @throws Z軸半径が範囲外の場合（1-50の範囲外）
+     * @throws 楕円体が有効座標範囲を超える場合
+     * @throws ブロック数が制限を超える場合（5000ブロック超過）
+     * 
+     * @example
+     * ```typescript
+     * // 幅広で低いプラットフォームを建築
+     * const result = await tool.execute({
+     *   centerX: 0, centerY: 65, centerZ: 0,
+     *   radiusX: 15, radiusY: 3, radiusZ: 12,
+     *   material: "stone_bricks",
+     *   hollow: false
+     * });
+     * 
+     * if (result.success) {
+     *   console.log(`楕円体建築完了: ${result.data.blocksPlaced}ブロック配置`);
+     * }
+     * ```
+     */
     async execute(args: {
         centerX: number;
         centerY: number;
@@ -65,6 +131,11 @@ export class BuildEllipsoidTool extends BaseTool {
         hollow?: boolean;
     }): Promise<ToolCallResult> {
         try {
+            // Socket-BE API接続確認
+            if (!this.world) {
+                return { success: false, message: "World not available. Ensure Minecraft is connected." };
+            }
+
             // 引数の基本検証
             if (!args || typeof args !== 'object') {
                 return this.createErrorResponse('Invalid arguments provided');
@@ -184,11 +255,33 @@ export class BuildEllipsoidTool extends BaseTool {
                 return this.createErrorResponse('Too many blocks to place (maximum 10000)');
             }
             
-            const result = await this.executeBatch(commands, false);
-            
-            if (result.success) {
+            try {
+                // Socket-BE APIを使用した実装
+                let blocksPlaced = 0;
+                
+                // 基本的な実装：コマンド配列をSocket-BE API呼び出しに変換
+                for (const command of commands) {
+                    if (command.startsWith('setblock ')) {
+                        const parts = command.split(' ');
+                        if (parts.length >= 5) {
+                            const x = parseInt(parts[1]);
+                            const y = parseInt(parts[2]);
+                            const z = parseInt(parts[3]);
+                            const block = parts[4];
+                            
+                            await this.world.setBlock({x, y, z}, block);
+                            blocksPlaced++;
+                            
+                            // 制限チェック
+                            if (blocksPlaced > 5000) {
+                                return this.createErrorResponse('Too many blocks to place (maximum 5000)');
+                            }
+                        }
+                    }
+                }
+                
                 return this.createSuccessResponse(
-                    `${hollow ? 'Hollow' : 'Solid'} ellipsoid built with ${blockId} at center (${center.x},${center.y},${center.z}) radii (${radiusXInt},${radiusYInt},${radiusZInt})`,
+                    `${hollow ? 'Hollow' : 'Solid'} ellipsoid built with ${blockId} at center (${center.x},${center.y},${center.z}) radii (${radiusXInt},${radiusYInt},${radiusZInt}). Placed ${blocksPlaced} blocks.`,
                     {
                         type: 'ellipsoid',
                         center: center,
@@ -197,11 +290,12 @@ export class BuildEllipsoidTool extends BaseTool {
                         radiusZ: radiusZInt,
                         material: blockId,
                         hollow: hollow,
-                        blocksPlaced: blocksPlaced
+                        blocksPlaced: blocksPlaced,
+                        apiUsed: 'Socket-BE'
                     }
                 );
-            } else {
-                return result;
+            } catch (buildError) {
+                return this.createErrorResponse(`Building error: ${buildError instanceof Error ? buildError.message : String(buildError)}`);
             }
 
         } catch (error) {

@@ -27,10 +27,9 @@
     "test:all": "npm run test:websocket && npm run test:responses && npm test"
   },
   "dependencies": {
+    "socket-be": "^2.1.0",
     "uuid": "^9.0.1",
-    "winston": "^3.11.0",
-    "ws": "^8.18.0",
-    "zod": "^3.22.0"
+    "ws": "^8.18.0"
   },
   "devDependencies": {
     "@types/jest": "^29.5.14",
@@ -60,7 +59,7 @@
     "gaming"
   ],
   "author": "mcbk-mcp contributors",
-  "license": "MIT",
+  "license": "GPL-3.0",
   "engines": {
     "node": ">=16.0.0"
   }

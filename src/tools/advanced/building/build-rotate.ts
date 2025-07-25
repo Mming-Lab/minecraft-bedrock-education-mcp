@@ -1,8 +1,41 @@
-import { BaseTool } from '../base/tool';
-import { ToolCallResult, InputSchema } from '../../types';
+import { BaseTool } from '../../base/tool';
+import { ToolCallResult, InputSchema } from '../../../types';
 
 /**
- * 座標を回転させるツール
+ * 構造物回転ツール
+ * 
+ * @description
+ * 指定された領域の構造物を回転軸周りに回転させてコピーします。
+ * 建物の回転コピー、対称構造の作成、装飾的な回転パターンの作成に最適で、
+ * ロドリゲスの回転公式を使用した正確な3D回転を実現します。
+ * 
+ * @extends BaseTool
+ * 
+ * @example
+ * ```typescript
+ * const tool = new BuildRotateTool();
+ * 
+ * // 家をY軸周りに90度回転してコピー
+ * await tool.execute({
+ *   sourceCorner1X: 0, sourceCorner1Y: 64, sourceCorner1Z: 0,
+ *   sourceCorner2X: 10, sourceCorner2Y: 70, sourceCorner2Z: 10,
+ *   originX: 5, originY: 67, originZ: 5,
+ *   axis: "y", angle: 90,
+ *   material: "oak_planks"
+ * });
+ * 
+ * // 柱をX軸周りに45度傾けてコピー
+ * await tool.execute({
+ *   sourceCorner1X: 20, sourceCorner1Y: 64, sourceCorner1Z: 0,
+ *   sourceCorner2X: 22, sourceCorner2Y: 80, sourceCorner2Z: 2,
+ *   originX: 21, originY: 64, originZ: 1,
+ *   axis: "x", angle: 45,
+ *   material: "stone"
+ * });
+ * ```
+ * 
+ * @since 1.0.0
+ * @author mcbk-mcp contributors
  */
 export class BuildRotateTool extends BaseTool {
     readonly name = 'build_rotate';
@@ -133,6 +166,45 @@ export class BuildRotateTool extends BaseTool {
         };
     }
 
+    /**
+     * 構造物を回転させてコピーします
+     * 
+     * @param args - 回転パラメータ
+     * @param args.sourceCorner1X - ソース領域の角点1のX座標
+     * @param args.sourceCorner1Y - ソース領域の角点1のY座標
+     * @param args.sourceCorner1Z - ソース領域の角点1のZ座標
+     * @param args.sourceCorner2X - ソース領域の角点2のX座標
+     * @param args.sourceCorner2Y - ソース領域の角点2のY座標
+     * @param args.sourceCorner2Z - ソース領域の角点2のZ座標
+     * @param args.originX - 回転中心のX座標（回転軸の中心点）
+     * @param args.originY - 回転中心のY座標（回転軸の中心点）
+     * @param args.originZ - 回転中心のZ座標（回転軸の中心点）
+     * @param args.axis - 回転軸（"x": 前後傾き、"y": 水平回転、"z": 左右回転）
+     * @param args.angle - 回転角度（度単位、0-360の範囲）
+     * @param args.material - 回転後のコピーに使用するブロック素材（デフォルト: "minecraft:stone"）
+     * @returns 回転実行結果
+     * 
+     * @throws 軸が無効な値の場合（x、y、z以外）
+     * @throws 角度が範囲外の場合（0-360の範囲外）
+     * @throws 座標が有効範囲を超える場合
+     * @throws ソース領域が大きすぎる場合（5000ブロック超過）
+     * @throws 回転後に配置するブロックがない場合
+     * 
+     * @example
+     * ```typescript
+     * // 塔を中心周りに4方向にコピー
+     * const angles = [90, 180, 270];
+     * for (const angle of angles) {
+     *   const result = await tool.execute({
+     *     sourceCorner1X: 0, sourceCorner1Y: 64, sourceCorner1Z: 0,
+     *     sourceCorner2X: 5, sourceCorner2Y: 80, sourceCorner2Z: 5,
+     *     originX: 2, originY: 72, originZ: 2,
+     *     axis: "y", angle: angle,
+     *     material: "cobblestone"
+     *   });
+     * }
+     * ```
+     */
     async execute(args: {
         sourceCorner1X: number;
         sourceCorner1Y: number;
@@ -148,6 +220,11 @@ export class BuildRotateTool extends BaseTool {
         material?: string;
     }): Promise<ToolCallResult> {
         try {
+            // Socket-BE API接続確認
+            if (!this.world) {
+                return { success: false, message: "World not available. Ensure Minecraft is connected." };
+            }
+
             const {
                 sourceCorner1X, sourceCorner1Y, sourceCorner1Z,
                 sourceCorner2X, sourceCorner2Y, sourceCorner2Z,
@@ -242,11 +319,32 @@ export class BuildRotateTool extends BaseTool {
                 return this.createErrorResponse('No valid blocks to place after rotation');
             }
 
-            const result = await this.executeBatch(commands, false);
-
-            if (result.success) {
+            try {
+                // Socket-BE APIを使用した実装
+                let actualBlocksPlaced = 0;
+                
+                // コマンド配列をSocket-BE API呼び出しに変換
+                for (const command of commands) {
+                    if (command.startsWith('setblock ')) {
+                        const parts = command.split(' ');
+                        if (parts.length >= 5) {
+                            const x = parseInt(parts[1]);
+                            const y = parseInt(parts[2]);
+                            const z = parseInt(parts[3]);
+                            const block = parts[4];
+                            
+                            await this.world.setBlock({x, y, z}, block);
+                            actualBlocksPlaced++;
+                            
+                            if (actualBlocksPlaced > 5000) {
+                                return this.createErrorResponse('Too many blocks to place (maximum 5000)');
+                            }
+                        }
+                    }
+                }
+                
                 return this.createSuccessResponse(
-                    `Rotated structure built with ${blockId}. Rotated ${totalBlocks} blocks by ${angle}° around ${axis}-axis at origin (${origin.x},${origin.y},${origin.z})`,
+                    `Rotated structure built with ${blockId}. Rotated ${totalBlocks} blocks by ${angle}° around ${axis}-axis at origin (${origin.x},${origin.y},${origin.z}). Placed ${actualBlocksPlaced} blocks.`,
                     {
                         type: 'rotation',
                         sourceRegion: {
@@ -258,11 +356,12 @@ export class BuildRotateTool extends BaseTool {
                         angle: angle,
                         material: blockId,
                         originalBlocks: totalBlocks,
-                        blocksPlaced: blocksPlaced
+                        blocksPlaced: actualBlocksPlaced,
+                        apiUsed: 'Socket-BE'
                     }
                 );
-            } else {
-                return result;
+            } catch (buildError) {
+                return this.createErrorResponse(`Building error: ${buildError instanceof Error ? buildError.message : String(buildError)}`);
             }
 
         } catch (error) {

@@ -51,6 +51,7 @@ Add to `claude_desktop_config.json`:
 - **`world`** - World control (time, weather, commands)
 - **`blocks`** - Block operations (set, fill, query)
 - **`system`** - Scoreboard and UI controls
+- **`camera`** - Camera control with cinematic sequences
 
 ### Building Tools
 - **`build_cube`** - Boxes and hollow structures

@@ -203,13 +203,36 @@ export class BuildHelixTool extends BaseTool {
                 return this.createErrorResponse('Turns must be between 0.5 and 20');
             }
             
-            // 座標範囲の検証
-            const minX = center.x - radiusInt;
-            const maxX = center.x + radiusInt;
-            const minY = center.y;
-            const maxY = center.y + heightInt - 1;
-            const minZ = center.z - radiusInt;
-            const maxZ = center.z + radiusInt;
+            // 座標範囲の検証（軸別対応）
+            let minX, maxX, minY, maxY, minZ, maxZ;
+            
+            switch (axis) {
+                case 'x':
+                    minX = center.x;
+                    maxX = center.x + heightInt - 1;
+                    minY = center.y - radiusInt;
+                    maxY = center.y + radiusInt;
+                    minZ = center.z - radiusInt;
+                    maxZ = center.z + radiusInt;
+                    break;
+                case 'z':
+                    minX = center.x - radiusInt;
+                    maxX = center.x + radiusInt;
+                    minY = center.y - radiusInt;
+                    maxY = center.y + radiusInt;
+                    minZ = center.z;
+                    maxZ = center.z + heightInt - 1;
+                    break;
+                case 'y':
+                default:
+                    minX = center.x - radiusInt;
+                    maxX = center.x + radiusInt;
+                    minY = center.y;
+                    maxY = center.y + heightInt - 1;
+                    minZ = center.z - radiusInt;
+                    maxZ = center.z + radiusInt;
+                    break;
+            }
             
             if (!this.validateCoordinates(minX, minY, minZ) || 
                 !this.validateCoordinates(maxX, maxY, maxZ)) {

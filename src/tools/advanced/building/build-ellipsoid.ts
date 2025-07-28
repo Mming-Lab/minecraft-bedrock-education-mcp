@@ -41,6 +41,12 @@ export class BuildEllipsoidTool extends BaseTool {
     readonly inputSchema: InputSchema = {
         type: 'object',
         properties: {
+            action: {
+                type: 'string',
+                description: 'Build action to perform',
+                enum: ['build'],
+                default: 'build'
+            },
             centerX: {
                 type: 'number',
                 description: 'Center X coordinate'
@@ -121,6 +127,7 @@ export class BuildEllipsoidTool extends BaseTool {
      * ```
      */
     async execute(args: {
+        action?: string;
         centerX: number;
         centerY: number;
         centerZ: number;
@@ -146,6 +153,7 @@ export class BuildEllipsoidTool extends BaseTool {
             }
 
             const { 
+                action = 'build',
                 centerX, 
                 centerY, 
                 centerZ, 
@@ -155,6 +163,11 @@ export class BuildEllipsoidTool extends BaseTool {
                 material = 'minecraft:stone', 
                 hollow = false 
             } = args;
+            
+            // actionパラメータをサポート（現在は build のみ）
+            if (action !== 'build') {
+                return this.createErrorResponse(`Unknown action: ${action}. Only 'build' is supported.`);
+            }
             
             // 座標の整数化
             const center = {

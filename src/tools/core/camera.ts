@@ -8,7 +8,7 @@ import { InputSchema, ToolCallResult } from '../../types';
  */
 export class CameraTool extends BaseTool {
     readonly name = 'camera';
-    readonly description = `Controls Minecraft camera view with 6 main actions: move_to (position camera), smooth_move (animated movement), track_entity (follow targets), fade (screen effects), reset (clear camera), set_mode (view presets and controls). Requires cheats enabled.`;
+    readonly description = `CAMERA control: move_to (position camera), smooth_move (animated movement), track_entity (follow targets), fade (screen effects), reset (clear camera), set_mode (view presets). Supports both individual actions and cinematic sequences. Perfect for filming, showcasing builds, or creating camera movements. Requires cheats enabled.`;
     
     readonly inputSchema: InputSchema = {
         type: 'object',
@@ -126,7 +126,7 @@ export class CameraTool extends BaseTool {
                     return await this.setMode(args);
                 
                 case 'sequence':
-                    return await this.executeSequence(args);
+                    return await this.executeCameraSequence(args);
                 
                 default:
                     return this.createErrorResponse(`Unknown camera action: ${action}`);
@@ -339,7 +339,7 @@ export class CameraTool extends BaseTool {
      * Executes a sequence of camera shots with proper timing
      * Enables cinematic camera work by chaining multiple shots automatically
      */
-    private async executeSequence(args: any): Promise<ToolCallResult> {
+    private async executeCameraSequence(args: any): Promise<ToolCallResult> {
         const { shots } = args;
         
         if (!shots || !Array.isArray(shots) || shots.length === 0) {
@@ -436,11 +436,5 @@ export class CameraTool extends BaseTool {
         }
     }
 
-    /**
-     * Promise-based delay utility
-     */
-    private delay(seconds: number): Promise<void> {
-        return new Promise(resolve => setTimeout(resolve, seconds * 1000));
-    }
 
 }

@@ -39,6 +39,12 @@ export class BuildLineTool extends BaseTool {
     readonly inputSchema: InputSchema = {
         type: 'object',
         properties: {
+            action: {
+                type: 'string',
+                description: 'Build action to perform',
+                enum: ['build'],
+                default: 'build'
+            },
             x1: {
                 type: 'number',
                 description: 'Starting X coordinate (east-west position where line begins)'
@@ -104,6 +110,7 @@ export class BuildLineTool extends BaseTool {
      * ```
      */
     async execute(args: {
+        action?: string;
         x1: number;
         y1: number;
         z1: number;
@@ -113,7 +120,12 @@ export class BuildLineTool extends BaseTool {
         material?: string;
     }): Promise<ToolCallResult> {
         try {
-            const { x1, y1, z1, x2, y2, z2, material = 'minecraft:stone' } = args;
+            const { action = 'build', x1, y1, z1, x2, y2, z2, material = 'minecraft:stone' } = args;
+            
+            // actionパラメータをサポート（現在は build のみ）
+            if (action !== 'build') {
+                return this.createErrorResponse(`Unknown action: ${action}. Only 'build' is supported.`);
+            }
             
             // 座標の整数化
             const start = {

@@ -2,6 +2,17 @@ import { Tool, InputSchema, ToolCallResult } from '../../types';
 import { World, Agent } from 'socket-be';
 
 /**
+ * シーケンス内の単一ステップを表すインターフェース
+ */
+export interface SequenceStep {
+    type: string;
+    [key: string]: any;
+    wait_time?: number;
+    on_error?: 'continue' | 'stop' | 'retry';
+    retry_count?: number;
+}
+
+/**
  * 全てのMinecraft制御ツールの抽象基底クラス
  * 
  * @description
@@ -284,6 +295,143 @@ export abstract class BaseTool implements Tool {
      */
     protected createSuccessResponse(message?: string, data?: any): ToolCallResult {
         return { success: true, message, data };
+    }
+
+    /**
+     * シーケンス実行の基底実装
+     * 各ツールで具体的なステップ実行をオーバーライドできます
+     * 
+     * @param steps - 実行するステップの配列
+     * @returns シーケンス実行結果
+     * 
+     * @protected
+     * @example
+     * ```typescript
+     * const steps = [
+     *   { type: 'move', x: 100, y: 64, z: 200, wait_time: 1 },
+     *   { type: 'place', block: 'stone', wait_time: 0.5 }
+     * ];
+     * const result = await this.executeSequence(steps);
+     * ```
+     */
+    protected async executeSequence(steps: SequenceStep[]): Promise<ToolCallResult> {
+        if (!steps || !Array.isArray(steps) || steps.length === 0) {
+            return this.createErrorResponse('Steps array is required for sequence execution');
+        }
+
+        try {
+            let totalDuration = 0;
+            const results: string[] = [];
+            
+            for (let i = 0; i < steps.length; i++) {
+                const step = steps[i];
+                const stepResult = await this.executeSequenceStep(step, i);
+                
+                if (!stepResult.success) {
+                    const errorAction = step.on_error || 'stop';
+                    
+                    switch (errorAction) {
+                        case 'continue':
+                            results.push(`Step ${i + 1}: Failed but continuing - ${stepResult.message}`);
+                            break;
+                        case 'retry':
+                            const retryResult = await this.retrySequenceStep(step, i);
+                            if (!retryResult.success) {
+                                return this.createErrorResponse(`Step ${i + 1} failed after retries: ${retryResult.message}`);
+                            }
+                            results.push(`Step ${i + 1}: Succeeded after retry - ${retryResult.message}`);
+                            break;
+                        case 'stop':
+                        default:
+                            return this.createErrorResponse(`Step ${i + 1} failed: ${stepResult.message}`);
+                    }
+                } else {
+                    results.push(`Step ${i + 1}: ${stepResult.message || 'Executed'}`);
+                }
+                
+                // 待ち時間処理
+                const waitTime = step.wait_time || 0;
+                if (waitTime > 0 && i < steps.length - 1) {
+                    await this.delay(waitTime);
+                    totalDuration += waitTime;
+                }
+            }
+            
+            return this.createSuccessResponse(
+                `Sequence completed: ${steps.length} steps executed over ${totalDuration.toFixed(1)}s\n` +
+                results.join('\n')
+            );
+            
+        } catch (error) {
+            return this.createErrorResponse(`Sequence execution failed: ${error instanceof Error ? error.message : String(error)}`);
+        }
+    }
+
+    /**
+     * シーケンス内の単一ステップを実行します
+     * 各ツールで具体的な実装をオーバーライドする必要があります
+     * 
+     * @param step - 実行するステップ
+     * @param index - ステップのインデックス
+     * @returns ステップ実行結果
+     * 
+     * @protected
+     * @virtual
+     */
+    protected async executeSequenceStep(step: SequenceStep, index: number): Promise<ToolCallResult> {
+        // デフォルト実装: wait以外は各ツールでオーバーライド必要
+        if (step.type === 'wait') {
+            const waitTime = step.wait_time || 1;
+            await this.delay(waitTime);
+            return this.createSuccessResponse(`Waited ${waitTime}s`);
+        }
+        
+        return this.createErrorResponse(`Unknown step type: ${step.type}. Override executeSequenceStep in your tool.`);
+    }
+
+    /**
+     * 失敗したステップをリトライします
+     * 
+     * @param step - リトライするステップ
+     * @param index - ステップのインデックス
+     * @returns リトライ結果
+     * 
+     * @protected
+     */
+    protected async retrySequenceStep(step: SequenceStep, index: number): Promise<ToolCallResult> {
+        const maxRetries = step.retry_count || 3;
+        
+        for (let retry = 1; retry <= maxRetries; retry++) {
+            if (process.stdin.isTTY !== false) {
+                console.error(`Retrying step ${index + 1}, attempt ${retry}/${maxRetries}`);
+            }
+            
+            // 少し待ってからリトライ
+            await this.delay(0.5);
+            
+            const result = await this.executeSequenceStep(step, index);
+            if (result.success) {
+                return result;
+            }
+            
+            if (retry === maxRetries) {
+                return this.createErrorResponse(`Step failed after ${maxRetries} retries: ${result.message}`);
+            }
+        }
+        
+        return this.createErrorResponse('Retry logic error');
+    }
+
+    /**
+     * Promise-based delay utility
+     * 
+     * @param seconds - 待機時間（秒）
+     * @returns Promise
+     * 
+     * @protected
+     */
+    protected delay(seconds: number): Promise<void> {
+        return new Promise(resolve => setTimeout(resolve, seconds * 1000));
     }
 
     /**

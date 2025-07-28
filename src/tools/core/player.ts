@@ -1,4 +1,4 @@
-import { BaseTool } from '../base/tool';
+import { BaseTool, SequenceStep } from '../base/tool';
 import { ToolCallResult, InputSchema } from '../../types';
 import { GameMode, AbilityType } from 'socket-be';
 
@@ -8,18 +8,18 @@ import { GameMode, AbilityType } from 'socket-be';
  */
 export class PlayerTool extends BaseTool {
     readonly name = 'player';
-    readonly description = 'Player management: information, abilities, game modes, inventory, communication, permissions, items';
+    readonly description = 'PLAYER management: info/location/communication/inventory/abilities/gamemode. Actions: get_info/location (player details), send_message (chat to player), give_item (add to inventory), set_gamemode (survival/creative/adventure/spectator), add_levels (XP), get/set_ability (mayfly/mute/worldbuilder), get/check_tag, get_ping, list_all_players. Supports sequences for chained player operations.';
     
     readonly inputSchema: InputSchema = {
         type: 'object',
         properties: {
             action: {
                 type: 'string',
-                description: 'Player operation to perform: get_info (returns player details like name, uniqueId, uuid, deviceId, xuid, isValid, isLoaded, isLocalPlayer), get_location (returns foot coordinates x,y,z and rotation in both Minecraft yaw -180°~+180° and compass bearing 0°~360° systems), send_message (sends chat message, requires: message), give_item (gives items to inventory, requires: item_id, optional: amount, can_destroy, can_place_on, keep_on_death), set_gamemode (changes game mode, optional: gamemode survival/creative/adventure/spectator, defaults to survival), add_levels (adds XP levels, requires: levels positive integer), get_abilities (returns abilities object with boolean values for mayfly/mute/worldbuilder), set_ability (modifies ability, requires: ability mayfly/mute/worldbuilder, ability_value boolean), get_tags (returns array of player tags), check_tag (checks specific tag, requires: tag, returns boolean), get_ping (returns network ping in milliseconds), list_all_players (returns array of online players with name, isLocalPlayer, isValid, isLoaded)',
+                description: 'Player operation to perform: get_info (returns player details), get_location (returns exact coordinates x,y,z including NEGATIVE values like x:-45.7, z:-123.2, plus rotation data), send_message (chat to player), give_item (add to inventory), set_gamemode (survival/creative/adventure/spectator), add_levels (XP), get/set_ability (mayfly/mute/worldbuilder), get/check_tag, get_ping, list_all_players. Use get_location before building to know exact position.',
                 enum: [
                     'get_info', 'get_location', 'send_message', 'give_item', 'set_gamemode',
                     'add_levels', 'get_abilities', 'set_ability', 'get_tags', 'check_tag',
-                    'get_ping', 'list_all_players'
+                    'get_ping', 'list_all_players', 'sequence'
                 ]
             },
             player_name: {
@@ -76,6 +76,32 @@ export class PlayerTool extends BaseTool {
                 type: 'boolean',
                 description: 'Keep item on death (optional)',
                 default: false
+            },
+            steps: {
+                type: 'array',
+                description: 'Array of player sequence steps. Each step needs "type" (action) and params. Optional: "wait_time" (seconds), "on_error" (continue/stop/retry). Example: [{type:"send_message",message:"Hello!"},{type:"set_gamemode",gamemode:"creative",wait_time:1}]',
+                items: {
+                    type: 'object',
+                    description: 'Individual sequence step',
+                    properties: {
+                        type: {
+                            type: 'string',
+                            description: 'Player action: get_info, get_location, send_message, give_item, set_gamemode, add_levels, get_abilities, set_ability, get_tags, check_tag, get_ping'
+                        },
+                        wait_time: {
+                            type: 'number',
+                            description: 'Seconds to wait after this step (0-60)',
+                            minimum: 0,
+                            maximum: 60
+                        },
+                        on_error: {
+                            type: 'string',
+                            enum: ['continue', 'stop', 'retry'],
+                            description: 'Error handling: continue (ignore), stop (halt), retry (try again)'
+                        }
+                    },
+                    required: ['type']
+                }
             }
         },
         required: ['action']
@@ -111,6 +137,7 @@ export class PlayerTool extends BaseTool {
         can_destroy?: string[];
         can_place_on?: string[];
         keep_on_death?: boolean;
+        steps?: SequenceStep[];
     }): Promise<ToolCallResult> {
         if (!this.world) {
             return { success: false, message: 'World not available for player operations.' };
@@ -242,6 +269,12 @@ export class PlayerTool extends BaseTool {
                     message = `Found ${allPlayers.length} players online`;
                     break;
 
+                case 'sequence':
+                    if (!args.steps) {
+                        return this.createErrorResponse('steps array is required for sequence action');
+                    }
+                    return await this.executeSequence(args.steps as SequenceStep[]);
+
                 default:
                     return { success: false, message: `Unknown action: ${action}` };
             }
@@ -294,5 +327,26 @@ export class PlayerTool extends BaseTool {
         let compass = (-minecraftYaw + 180 + 360) % 360;
         
         return Math.round(compass * 100) / 100; // 小数点2桁まで
+    }
+
+    /**
+     * プレイヤー専用のシーケンスステップ実行
+     * 
+     * @param step - 実行するステップ
+     * @param index - ステップのインデックス
+     * @returns ステップ実行結果
+     * 
+     * @protected
+     * @override
+     */
+    protected async executeSequenceStep(step: SequenceStep, index: number): Promise<ToolCallResult> {
+        // wait ステップは基底クラスで処理される
+        if (step.type === 'wait') {
+            return await super.executeSequenceStep(step, index);
+        }
+
+        // プレイヤー特有のステップを実行
+        const playerArgs = { action: step.type, ...step };
+        return await this.execute(playerArgs);
     }
 }

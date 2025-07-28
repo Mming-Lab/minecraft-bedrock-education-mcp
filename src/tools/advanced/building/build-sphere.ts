@@ -37,10 +37,16 @@ import { ToolCallResult, InputSchema } from '../../../types';
  */
 export class BuildSphereTool extends BaseTool {
     readonly name = 'build_sphere';
-    readonly description = 'Build SPHERE: ball, dome, round structure, planet, orb. Requires: centerX,centerY,centerZ,radius';
+    readonly description = 'Build SPHERE: ball, dome, round structure, planet, orb. Specify center (centerX,centerY,centerZ) + radius. Coordinates can be positive or negative (e.g. centerX:-25, centerZ:-75). Perfect for domes, decorations, planets, bubbles.';
     readonly inputSchema: InputSchema = {
         type: 'object',
         properties: {
+            action: {
+                type: 'string',
+                description: 'Build action to perform',
+                enum: ['build'],
+                default: 'build'
+            },
             centerX: {
                 type: 'number',
                 description: 'Center X coordinate (east-west position of sphere center)'
@@ -105,6 +111,7 @@ export class BuildSphereTool extends BaseTool {
      * ```
      */
     async execute(args: {
+        action?: string;
         centerX: number;
         centerY: number;
         centerZ: number;
@@ -118,7 +125,12 @@ export class BuildSphereTool extends BaseTool {
                 return { success: false, message: "World not available. Ensure Minecraft is connected." };
             }
 
-            const { centerX, centerY, centerZ, radius, material = 'minecraft:stone', hollow = false } = args;
+            const { action = 'build', centerX, centerY, centerZ, radius, material = 'minecraft:stone', hollow = false } = args;
+            
+            // actionパラメータをサポート（現在は build のみ）
+            if (action !== 'build') {
+                return this.createErrorResponse(`Unknown action: ${action}. Only 'build' is supported.`);
+            }
             
             // 座標の整数化
             const center = {

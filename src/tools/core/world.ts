@@ -1,4 +1,4 @@
-import { BaseTool } from '../base/tool';
+import { BaseTool, SequenceStep } from '../base/tool';
 import { ToolCallResult, InputSchema } from '../../types';
 import { WeatherType } from 'socket-be';
 
@@ -19,7 +19,7 @@ export class WorldTool extends BaseTool {
                 enum: [
                     'set_time', 'get_time', 'get_day', 'set_weather', 'get_weather',
                     'get_players', 'get_world_info', 'send_message', 'run_command',
-                    'get_connection_info'
+                    'get_connection_info', 'sequence'
                 ]
             },
             time: {
@@ -49,6 +49,10 @@ export class WorldTool extends BaseTool {
             command: {
                 type: 'string',
                 description: 'Minecraft command to execute'
+            },
+            steps: {
+                type: 'array',
+                description: 'Array of world actions for sequence. Each step should have "type" field and relevant parameters.'
             }
         },
         required: ['action']
@@ -75,6 +79,7 @@ export class WorldTool extends BaseTool {
         message?: string;
         target?: string;
         command?: string;
+        steps?: SequenceStep[];
     }): Promise<ToolCallResult> {
         if (!this.world) {
             return { success: false, message: 'World not available. Ensure Minecraft is connected.' };
@@ -167,6 +172,12 @@ export class WorldTool extends BaseTool {
                     message = 'Connection info retrieved';
                     break;
 
+                case 'sequence':
+                    if (!args.steps) {
+                        return this.createErrorResponse('steps array is required for sequence action');
+                    }
+                    return await this.executeSequence(args.steps as SequenceStep[]);
+
                 default:
                     return { success: false, message: `Unknown action: ${action}` };
             }
@@ -207,5 +218,26 @@ export class WorldTool extends BaseTool {
             default:
                 return WeatherType.Clear;
         }
+    }
+
+    /**
+     * ワールド専用のシーケンスステップ実行
+     * 
+     * @param step - 実行するステップ
+     * @param index - ステップのインデックス
+     * @returns ステップ実行結果
+     * 
+     * @protected
+     * @override
+     */
+    protected async executeSequenceStep(step: SequenceStep, index: number): Promise<ToolCallResult> {
+        // wait ステップは基底クラスで処理される
+        if (step.type === 'wait') {
+            return await super.executeSequenceStep(step, index);
+        }
+
+        // ワールド特有のステップを実行
+        const worldArgs = { action: step.type, ...step };
+        return await this.execute(worldArgs);
     }
 }

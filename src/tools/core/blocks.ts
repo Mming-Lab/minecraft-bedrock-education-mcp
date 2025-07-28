@@ -1,4 +1,4 @@
-import { BaseTool } from '../base/tool';
+import { BaseTool, SequenceStep } from '../base/tool';
 import { ToolCallResult, InputSchema } from '../../types';
 import { SetBlockMode, FillBlocksMode } from 'socket-be';
 
@@ -18,7 +18,7 @@ export class BlocksTool extends BaseTool {
                 description: 'Block operation to perform',
                 enum: [
                     'set_block', 'fill_area', 'get_top_solid_block', 'query_block_data',
-                    'query_item_data', 'query_mob_data'
+                    'query_item_data', 'query_mob_data', 'sequence'
                 ]
             },
             x: { type: 'number', description: 'X coordinate' },
@@ -35,6 +35,10 @@ export class BlocksTool extends BaseTool {
                 type: 'string',
                 description: 'Block placement/fill mode',
                 enum: ['replace', 'keep', 'destroy', 'hollow', 'outline']
+            },
+            steps: {
+                type: 'array',
+                description: 'Array of block actions for sequence. Each step should have "type" field and relevant parameters.'
             }
         },
         required: ['action']
@@ -65,6 +69,7 @@ export class BlocksTool extends BaseTool {
         z2?: number;
         block_id?: string;
         mode?: string;
+        steps?: SequenceStep[];
     }): Promise<ToolCallResult> {
         if (!this.world) {
             return { success: false, message: 'World not available. Ensure Minecraft is connected.' };
@@ -167,6 +172,12 @@ export class BlocksTool extends BaseTool {
                     message = 'Mob data retrieved';
                     break;
 
+                case 'sequence':
+                    if (!args.steps) {
+                        return this.createErrorResponse('steps array is required for sequence action');
+                    }
+                    return await this.executeSequence(args.steps as SequenceStep[]);
+
                 default:
                     return { success: false, message: `Unknown action: ${action}` };
             }
@@ -183,5 +194,26 @@ export class BlocksTool extends BaseTool {
                 message: `Block operation error: ${error instanceof Error ? error.message : String(error)}`
             };
         }
+    }
+
+    /**
+     * ブロック専用のシーケンスステップ実行
+     * 
+     * @param step - 実行するステップ
+     * @param index - ステップのインデックス
+     * @returns ステップ実行結果
+     * 
+     * @protected
+     * @override
+     */
+    protected async executeSequenceStep(step: SequenceStep, index: number): Promise<ToolCallResult> {
+        // wait ステップは基底クラスで処理される
+        if (step.type === 'wait') {
+            return await super.executeSequenceStep(step, index);
+        }
+
+        // ブロック特有のステップを実行
+        const blocksArgs = { action: step.type, ...step };
+        return await this.execute(blocksArgs);
     }
 }

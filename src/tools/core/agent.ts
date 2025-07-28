@@ -1,4 +1,4 @@
-import { BaseTool } from '../base/tool';
+import { BaseTool, SequenceStep } from '../base/tool';
 import { ToolCallResult, InputSchema } from '../../types';
 import { AgentDirection } from 'socket-be';
 
@@ -19,7 +19,7 @@ export class AgentTool extends BaseTool {
                 enum: [
                     'move', 'turn', 'teleport', 'attack', 'mine_block', 'place_block', 
                     'inspect_block', 'detect_block', 'get_position', 'collect_item',
-                    'drop_item', 'drop_all', 'get_inventory', 'set_item_in_slot'
+                    'drop_item', 'drop_all', 'get_inventory', 'set_item_in_slot', 'sequence'
                 ]
             },
             direction: {
@@ -58,6 +58,10 @@ export class AgentTool extends BaseTool {
                 type: 'number',
                 description: 'Item data/aux value',
                 default: 0
+            },
+            steps: {
+                type: 'array',
+                description: 'Array of agent actions for sequence. Each step should have "type" field and relevant parameters.'
             }
         },
         required: ['action']
@@ -88,6 +92,7 @@ export class AgentTool extends BaseTool {
         item_id?: string;
         amount?: number;
         data?: number;
+        steps?: SequenceStep[];
     }): Promise<ToolCallResult> {
         if (!this.agent) {
             return { success: false, message: 'Agent not available. Ensure Minecraft is connected and agent is spawned.' };
@@ -200,6 +205,12 @@ export class AgentTool extends BaseTool {
                     message = `Set ${setAmount} ${args.item_id} in slot ${args.slot}`;
                     break;
 
+                case 'sequence':
+                    if (!args.steps) {
+                        return this.createErrorResponse('steps array is required for sequence action');
+                    }
+                    return await this.executeSequence(args.steps as SequenceStep[]);
+
                 default:
                     return { success: false, message: `Unknown action: ${action}` };
             }
@@ -216,5 +227,26 @@ export class AgentTool extends BaseTool {
                 message: `Agent operation error: ${error instanceof Error ? error.message : String(error)}`
             };
         }
+    }
+
+    /**
+     * エージェント専用のシーケンスステップ実行
+     * 
+     * @param step - 実行するステップ
+     * @param index - ステップのインデックス
+     * @returns ステップ実行結果
+     * 
+     * @protected
+     * @override
+     */
+    protected async executeSequenceStep(step: SequenceStep, index: number): Promise<ToolCallResult> {
+        // wait ステップは基底クラスで処理される
+        if (step.type === 'wait') {
+            return await super.executeSequenceStep(step, index);
+        }
+
+        // エージェント特有のステップを実行
+        const agentArgs = { action: step.type, ...step };
+        return await this.execute(agentArgs);
     }
 }

@@ -8,6 +8,7 @@ Minecraft統合版（Bedrock Edition）・教育版（Education Edition）を制
 
 - **安定した統合**: WebSocket経由での信頼性の高いMinecraft制御
 - **階層化ツール**: コアツール（ブロック、プレイヤー、ワールド）+ 高度建築ツール
+- **シーケンス制御**: 複数ツール連携と待ち時間・エラーハンドリング対応
 - **MCP対応**: Claude Desktopなど各種MCPクライアントに対応
 - **型安全**: 完全TypeScript実装
 
@@ -46,12 +47,13 @@ npm start
 ## 利用可能ツール
 
 ### コアツール
-- **`agent`** - エージェント制御（移動、回転、テレポート、インベントリ）
-- **`player`** - プレイヤー管理（情報、アイテム、能力）
-- **`world`** - ワールド制御（時間、天気、コマンド）
-- **`blocks`** - ブロック操作（設置、塗りつぶし、クエリ）
-- **`system`** - スコアボードとUI制御
+- **`agent`** - エージェント制御（移動、回転、テレポート、インベントリ、シーケンス）
+- **`player`** - プレイヤー管理（情報、アイテム、能力、シーケンス）
+- **`world`** - ワールド制御（時間、天気、コマンド、シーケンス）
+- **`blocks`** - ブロック操作（設置、塗りつぶし、クエリ、シーケンス）
+- **`system`** - スコアボードとUI制御（シーケンス）
 - **`camera`** - 映画的シーケンス対応カメラ制御
+- **`sequence`** - 複数ツール連携シーケンス実行
 
 ### 建築ツール
 - **`build_cube`** - 箱型と中空構造
@@ -65,6 +67,46 @@ npm start
 - **`build_hyperboloid`** - 冷却塔型
 - **`build_rotate`** - 構造回転
 - **`build_transform`** - 構造変形
+
+## シーケンス機能
+
+### 単一ツールシーケンス
+同一ツール内で複数のアクションを実行：
+```javascript
+// エージェントシーケンス例
+{
+  "action": "sequence",
+  "steps": [
+    {"type": "move", "direction": "forward", "distance": 3, "wait_time": 1},
+    {"type": "turn", "direction": "right", "wait_time": 1},
+    {"type": "move", "direction": "forward", "distance": 2}
+  ]
+}
+```
+
+### クロスツールシーケンス
+複数のツールを組み合わせた連携シーケンス：
+```javascript
+// クロスツールシーケンス例
+{
+  "steps": [
+    {"tool": "player", "type": "give_item", "item_id": "minecraft:diamond_sword", "wait_time": 1},
+    {"tool": "agent", "type": "move", "direction": "forward", "distance": 5, "wait_time": 2},
+    {"tool": "camera", "type": "smooth_move", "x": 100, "y": 80, "z": 200, "duration": 3},
+    {"tool": "blocks", "type": "place", "x": 100, "y": 64, "z": 200, "block": "minecraft:diamond_block"}
+  ]
+}
+```
+
+### エラーハンドリング
+シーケンス実行中のエラー処理設定：
+- **`on_error: "stop"`** - エラー時にシーケンス停止（デフォルト）
+- **`on_error: "continue"`** - エラーを無視して継続
+- **`on_error: "retry"`** - 失敗ステップをリトライ（`retry_count`で回数設定）
+
+### 待ち時間制御
+- **`wait_time`** - 各ステップ後の待機秒数
+- カメラアニメーションなど時間のかかる操作の自動待機対応
 
 ## 開発
 

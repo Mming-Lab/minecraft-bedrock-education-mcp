@@ -42,6 +42,12 @@ export class BuildTransformTool extends BaseTool {
     readonly inputSchema: InputSchema = {
         type: 'object',
         properties: {
+            action: {
+                type: 'string',
+                description: 'Build action to perform',
+                enum: ['build'],
+                default: 'build'
+            },
             sourceCorner1X: {
                 type: 'number',
                 description: 'Source region corner 1 X coordinate'
@@ -181,6 +187,7 @@ export class BuildTransformTool extends BaseTool {
      * ```
      */
     async execute(args: {
+        action?: string;
         sourceCorner1X: number;
         sourceCorner1Y: number;
         sourceCorner1Z: number;
@@ -200,12 +207,18 @@ export class BuildTransformTool extends BaseTool {
             }
 
             const {
+                action = 'build',
                 sourceCorner1X, sourceCorner1Y, sourceCorner1Z,
                 sourceCorner2X, sourceCorner2Y, sourceCorner2Z,
                 targetX, targetY, targetZ,
                 transformation,
                 material = ''
             } = args;
+            
+            // actionパラメータをサポート（現在は build のみ）
+            if (action !== 'build') {
+                return this.createErrorResponse(`Unknown action: ${action}. Only 'build' is supported.`);
+            }
 
             // 座標の整数化
             const source1 = {

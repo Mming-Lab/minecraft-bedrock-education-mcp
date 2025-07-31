@@ -79,6 +79,9 @@ export interface Property {
     minimum?: number;
     maximum?: number;
     default?: any;
+    items?: Property;
+    properties?: Record<string, Property>;
+    required?: string[];
 }
 
 

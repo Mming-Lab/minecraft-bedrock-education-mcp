@@ -37,33 +37,39 @@ import { ToolCallResult, InputSchema } from '../../../types';
  */
 export class BuildCubeTool extends BaseTool {
     readonly name = 'build_cube';
-    readonly description = 'Build CUBE/RECTANGLE: box, rectangle, wall, platform, room, house frame. Requires: x1,y1,z1,x2,y2,z2';
+    readonly description = 'Build CUBE/RECTANGLE: box, rectangle, wall, platform, room, house frame. Define with 2 corners (x1,y1,z1) to (x2,y2,z2). Coordinates can be positive or negative (e.g. x:-50, z:-100). Supports sequences for automation.';
     readonly inputSchema: InputSchema = {
         type: 'object',
         properties: {
+            action: {
+                type: 'string',
+                description: 'Build action to perform',
+                enum: ['build'],
+                default: 'build'
+            },
             x1: {
                 type: 'number',
-                description: 'Starting X coordinate'
+                description: 'Starting X coordinate (east-west, can be negative like -50)'
             },
             y1: {
                 type: 'number',
-                description: 'Starting Y coordinate'
+                description: 'Starting Y coordinate (height, usually 64-100 for ground level)'
             },
             z1: {
                 type: 'number',
-                description: 'Starting Z coordinate'
+                description: 'Starting Z coordinate (north-south, can be negative like -100)'
             },
             x2: {
                 type: 'number',
-                description: 'Ending X coordinate'
+                description: 'Ending X coordinate (east-west, can be negative)'
             },
             y2: {
                 type: 'number',
-                description: 'Ending Y coordinate'
+                description: 'Ending Y coordinate (height, can be higher than y1 for tall structures)'
             },
             z2: {
                 type: 'number',
-                description: 'Ending Z coordinate'
+                description: 'Ending Z coordinate (north-south, can be negative)'
             },
             material: {
                 type: 'string',
@@ -112,6 +118,7 @@ export class BuildCubeTool extends BaseTool {
      * ```
      */
     async execute(args: {
+        action?: string;
         x1: number;
         y1: number;
         z1: number;
@@ -122,7 +129,12 @@ export class BuildCubeTool extends BaseTool {
         hollow?: boolean;
     }): Promise<ToolCallResult> {
         try {
-            const { x1, y1, z1, x2, y2, z2, material = 'minecraft:stone', hollow = false } = args;
+            const { action = 'build', x1, y1, z1, x2, y2, z2, material = 'minecraft:stone', hollow = false } = args;
+            
+            // actionパラメータをサポート（現在は build のみ）
+            if (action !== 'build') {
+                return this.createErrorResponse(`Unknown action: ${action}. Only 'build' is supported.`);
+            }
             
             // 座標の整数化
             const coords = {

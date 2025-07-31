@@ -41,6 +41,12 @@ export class BuildHelixTool extends BaseTool {
     readonly inputSchema: InputSchema = {
         type: 'object',
         properties: {
+            action: {
+                type: 'string',
+                description: 'Build action to perform',
+                enum: ['build'],
+                default: 'build'
+            },
             centerX: {
                 type: 'number',
                 description: 'Center X coordinate'
@@ -139,6 +145,7 @@ export class BuildHelixTool extends BaseTool {
      * ```
      */
     async execute(args: {
+        action?: string;
         centerX: number;
         centerY: number;
         centerZ: number;
@@ -167,6 +174,7 @@ export class BuildHelixTool extends BaseTool {
             }
 
             const { 
+                action = 'build',
                 centerX, 
                 centerY, 
                 centerZ, 
@@ -179,6 +187,11 @@ export class BuildHelixTool extends BaseTool {
                 direction = 'positive',
                 chirality = 'right'
             } = args;
+            
+            // actionパラメータをサポート（現在は build のみ）
+            if (action !== 'build') {
+                return this.createErrorResponse(`Unknown action: ${action}. Only 'build' is supported.`);
+            }
             
             // 座標の整数化
             const center = {
@@ -203,13 +216,36 @@ export class BuildHelixTool extends BaseTool {
                 return this.createErrorResponse('Turns must be between 0.5 and 20');
             }
             
-            // 座標範囲の検証
-            const minX = center.x - radiusInt;
-            const maxX = center.x + radiusInt;
-            const minY = center.y;
-            const maxY = center.y + heightInt - 1;
-            const minZ = center.z - radiusInt;
-            const maxZ = center.z + radiusInt;
+            // 座標範囲の検証（軸別対応）
+            let minX, maxX, minY, maxY, minZ, maxZ;
+            
+            switch (axis) {
+                case 'x':
+                    minX = center.x;
+                    maxX = center.x + heightInt - 1;
+                    minY = center.y - radiusInt;
+                    maxY = center.y + radiusInt;
+                    minZ = center.z - radiusInt;
+                    maxZ = center.z + radiusInt;
+                    break;
+                case 'z':
+                    minX = center.x - radiusInt;
+                    maxX = center.x + radiusInt;
+                    minY = center.y - radiusInt;
+                    maxY = center.y + radiusInt;
+                    minZ = center.z;
+                    maxZ = center.z + heightInt - 1;
+                    break;
+                case 'y':
+                default:
+                    minX = center.x - radiusInt;
+                    maxX = center.x + radiusInt;
+                    minY = center.y;
+                    maxY = center.y + heightInt - 1;
+                    minZ = center.z - radiusInt;
+                    maxZ = center.z + radiusInt;
+                    break;
+            }
             
             if (!this.validateCoordinates(minX, minY, minZ) || 
                 !this.validateCoordinates(maxX, maxY, maxZ)) {

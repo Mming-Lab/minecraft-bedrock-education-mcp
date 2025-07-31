@@ -1,4 +1,4 @@
-import { BaseTool } from '../base/tool';
+import { BaseTool, SequenceStep } from '../base/tool';
 import { ToolCallResult, InputSchema } from '../../types';
 
 /**
@@ -15,7 +15,7 @@ export class SystemTool extends BaseTool {
             category: {
                 type: 'string',
                 description: 'System category to use',
-                enum: ['scoreboard', 'screen']
+                enum: ['scoreboard', 'screen', 'sequence']
             },
             action: {
                 type: 'string',
@@ -75,6 +75,10 @@ export class SystemTool extends BaseTool {
                 type: 'number',
                 description: 'Fade out duration in ticks (default: 20)',
                 default: 20
+            },
+            steps: {
+                type: 'array',
+                description: 'Array of system actions for sequence. Each step should have "category" and "action" fields and relevant parameters.'
             }
         },
         required: ['category', 'action']
@@ -112,6 +116,7 @@ export class SystemTool extends BaseTool {
         fade_in?: number;
         stay?: number;
         fade_out?: number;
+        steps?: SequenceStep[];
     }): Promise<ToolCallResult> {
         if (!this.world) {
             return { success: false, message: 'World not available for system operations.' };
@@ -125,8 +130,13 @@ export class SystemTool extends BaseTool {
                     return await this.executeScoreboardOperation(action, args);
                 case 'screen':
                     return await this.executeScreenOperation(action, args);
+                case 'sequence':
+                    if (!args.steps) {
+                        return this.createErrorResponse('steps array is required for sequence category');
+                    }
+                    return await this.executeSequence(args.steps as SequenceStep[]);
                 default:
-                    return { success: false, message: `Unknown category: ${category}. Use: scoreboard, screen` };
+                    return { success: false, message: `Unknown category: ${category}. Use: scoreboard, screen, sequence` };
             }
 
         } catch (error) {
@@ -303,5 +313,31 @@ export class SystemTool extends BaseTool {
             message: message,
             data: { category: 'screen', action, result, targetPlayer: player.name, timestamp: Date.now() }
         };
+    }
+
+    /**
+     * システム専用のシーケンスステップ実行
+     * 
+     * @param step - 実行するステップ
+     * @param index - ステップのインデックス
+     * @returns ステップ実行結果
+     * 
+     * @protected
+     * @override
+     */
+    protected async executeSequenceStep(step: SequenceStep, index: number): Promise<ToolCallResult> {
+        // wait ステップは基底クラスで処理される
+        if (step.type === 'wait') {
+            return await super.executeSequenceStep(step, index);
+        }
+
+        // システム特有のステップを実行
+        // SystemToolは category が必要なので、step.type を category に、step.action を action に変換
+        const systemArgs = { 
+            category: step.category || step.type, // categoryが指定されていればそれを使用、なければtypeをcategory扱い
+            action: step.action || 'default_action',
+            ...step 
+        };
+        return await this.execute(systemArgs);
     }
 }

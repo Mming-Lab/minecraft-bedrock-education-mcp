@@ -17,8 +17,7 @@ A TypeScript MCP server for controlling Minecraft Bedrock Edition and Education 
 
 ## Quick Start
 
-### Installation
-
+### 1. Installation
 ```bash
 git clone https://github.com/Mming-Lab/minecraft-bedrock-mcp-server.git
 cd minecraft-bedrock-mcp-server
@@ -27,15 +26,12 @@ npm run build
 npm start
 ```
 
-### Minecraft Setup
+### 2. Minecraft Setup
+1. Create world with **cheats enabled** (Bedrock/Education Edition)
+2. Connect from Minecraft: `/connect localhost:8001/ws`
 
-1. **Create world** with cheats enabled (Bedrock/Education Edition)
-2. **Connect from Minecraft**: `/connect localhost:8001/ws`
-
-### Claude Desktop Setup
-
+### 3. Claude Desktop Setup
 Add to `claude_desktop_config.json`:
-
 ```json
 {
   "mcpServers": {
@@ -47,60 +43,78 @@ Add to `claude_desktop_config.json`:
 }
 ```
 
-## Available Tools
+## Features
 
-### Core Tools
-- **`agent`** - Agent control (move, turn, teleport, inventory)
-- **`player`** - Player management (info, items, abilities)
-- **`world`** - World control (time, weather, commands)
-- **`blocks`** - Block operations (set, fill, query)
-- **`system`** - Scoreboard and UI controls
+- **Core Tools**: `player`, `agent`, `world`, `blocks`, `camera`, `system`, `minecraft_wiki`
+- **Building Tools**: `build_cube`, `build_sphere`, `build_cylinder`, `build_line`, etc.
+- **Wiki Integration**: Search Minecraft Wiki for Bedrock/Education Edition info
+- **Sequence Control**: Chain multiple tools with timing and error handling
+- **Cross-Tool Sequences**: Combine different tools in automated workflows
 
-### Building Tools
-- **`build_cube`** - Boxes and hollow structures
-- **`build_sphere`** - Spheres and domes
-- **`build_cylinder`** - Towers and pipes
-- **`build_line`** - Straight line construction
-- **`build_torus`** - Donut shapes
-- **`build_helix`** - Spiral structures
-- **`build_ellipsoid`** - Egg shapes
-- **`build_paraboloid`** - Satellite dishes
-- **`build_hyperboloid`** - Cooling towers
-- **`build_rotate`** - Structure rotation
-- **`build_transform`** - Structure transformations
+## Usage Examples
 
-## Development
-
-### Build Commands
-```bash
-npm run build    # Compile TypeScript
-npm run dev      # Build and run for testing
-```
-
-### Port Configuration
-Configure port in MCP client settings:
-```json
+### Wiki Search
+```javascript
+// Step-by-step wiki search to avoid overwhelming responses
 {
-  "mcpServers": {
-    "minecraft-bedrock": {
-      "command": "node",
-      "args": ["path/to/dist/server.js", "--port=8002"]
-    }
-  }
+  "action": "sequence",
+  "steps": [
+    {"type": "search", "query": "give command", "focus": "commands"},
+    {"type": "get_page_summary", "title": "Commands/give"},
+    {"type": "get_section", "title": "Commands/give", "section": "Syntax"}
+  ]
 }
 ```
 
-## Architecture
+### Building Sequence
+```javascript
+{
+  "steps": [
+    {"tool": "player", "type": "teleport", "x": 0, "y": 70, "z": 0},
+    {"tool": "build_cube", "type": "build", "x1": -5, "y1": 70, "z1": -5, "x2": 5, "y2": 75, "z2": 5, "material": "diamond_block"},
+    {"tool": "camera", "type": "move_to", "x": 10, "y": 80, "z": 10, "look_at_x": 0, "look_at_y": 72, "look_at_z": 0}
+  ]
+}
+```
 
+## Development
+
+```bash
+npm run build    # Compile TypeScript
+npm run dev      # Build and run
+npm test         # Run test client
 ```
-src/
-├── server.ts           # Main MCP server
-├── types.ts           # Type definitions
-└── tools/
-    ├── base/tool.ts   # Base class
-    ├── core/          # Core API tools
-    └── advanced/      # Building tools
+
+### Port Configuration
+```json
+{
+  "args": ["path/to/dist/server.js", "--port=8002"]
+}
 ```
+
+## Tools
+
+### Core Tools
+- `player` - Teleport, give items, gamemode, XP
+- `agent` - Move, build, mine, inventory management  
+- `world` - Time, weather, run commands
+- `blocks` - Place/fill blocks, query terrain
+- `camera` - Cinematic shots, smooth movement
+- `system` - Scoreboards, titles, action bars
+- `minecraft_wiki` - Search wiki for Bedrock/Education info
+- `sequence` - Chain multiple tools together
+
+### Building Tools
+- `build_cube`, `build_sphere`, `build_cylinder` - Basic shapes
+- `build_line`, `build_helix`, `build_torus` - Complex geometry  
+- `build_ellipsoid`, `build_paraboloid`, `build_hyperboloid` - Advanced shapes
+- `build_rotate`, `build_transform` - Copy and transform structures
+
+## Requirements
+
+- Node.js 16+
+- Minecraft Bedrock/Education Edition with cheats
+- MCP client (Claude Desktop, etc.)
 
 ## License
 
@@ -108,10 +122,4 @@ GPL-3.0
 
 ## Acknowledgments
 
-- [SocketBE](https://github.com/tutinoko2048/SocketBE) - Minecraft Bedrock WebSocket integration library
-
-## Requirements
-
-- Node.js 16+
-- Minecraft Bedrock Edition or Education Edition with cheats
-- MCP client (Claude Desktop, etc.)
+- [SocketBE](https://github.com/tutinoko2048/SocketBE) - Minecraft Bedrock WebSocket integration

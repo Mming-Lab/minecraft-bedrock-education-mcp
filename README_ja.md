@@ -4,6 +4,10 @@
 
 Minecraft統合版（Bedrock Edition）・教育版（Education Edition）を制御するTypeScript製MCPサーバーです。
 
+<a href="https://glama.ai/mcp/servers/@Mming-Lab/minecraft-bedrock-mcp-server">
+  <img width="380" height="200" src="https://glama.ai/mcp/servers/@Mming-Lab/minecraft-bedrock-mcp-server/badge" alt="Minecraft Bedrock Server MCP server" />
+</a>
+
 ## 機能
 
 - **安定した統合**: WebSocket経由での信頼性の高いMinecraft制御

@@ -2,7 +2,18 @@
 
 [日本語 README はこちら / Japanese README here](README_ja.md)
 
-A TypeScript MCP server for controlling Minecraft Bedrock Edition via WebSocket.
+A TypeScript MCP server for controlling Minecraft Bedrock Edition and Education Edition.
+
+<a href="https://glama.ai/mcp/servers/@Mming-Lab/minecraft-bedrock-mcp-server">
+  <img width="380" height="200" src="https://glama.ai/mcp/servers/@Mming-Lab/minecraft-bedrock-mcp-server/badge" alt="Minecraft Bedrock Server MCP server" />
+</a>
+
+## Features
+
+- **Reliable Integration**: Stable Minecraft control via WebSocket
+- **Hierarchical Tools**: Core tools (blocks, player, world) + Advanced building tools
+- **MCP Compatible**: Works with Claude Desktop and other MCP clients
+- **Type-safe**: Full TypeScript implementation
 
 ## Quick Start
 

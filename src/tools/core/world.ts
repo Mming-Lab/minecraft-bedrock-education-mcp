@@ -48,7 +48,7 @@ export class WorldTool extends BaseTool {
             },
             command: {
                 type: 'string',
-                description: 'Minecraft command to execute'
+                description: 'Minecraft Bedrock Edition command to execute (without /). For correct syntax and available commands, use the minecraft_wiki tool to search for specific command information. Examples: "give @p diamond_sword", "tp @p 0 64 0", "setblock ~ ~ ~ stone"'
             },
             steps: {
                 type: 'array',

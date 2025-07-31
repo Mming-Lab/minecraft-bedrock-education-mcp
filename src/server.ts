@@ -30,6 +30,7 @@ import { BlocksTool } from './tools/core/blocks';
 import { SystemTool } from './tools/core/system';
 import { CameraTool } from './tools/core/camera';
 import { SequenceTool } from './tools/core/sequence';
+import { MinecraftWikiTool } from './tools/core/minecraft-wiki';
 
 import { BaseTool } from './tools/base/tool';
 
@@ -241,6 +242,7 @@ export class MinecraftMCPServer {
             new SystemTool(),
             new CameraTool(),
             new SequenceTool(),
+            new MinecraftWikiTool(),
             
             // Advanced Building ツール（高レベル建築機能）
             new BuildCubeTool(),           // ✅ 完全動作

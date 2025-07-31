@@ -34,39 +34,37 @@ Add to `claude_desktop_config.json`:
 
 ## Features
 
-- **Core Tools**: `player`, `agent`, `world`, `blocks`, `camera`, `system`
+- **Core Tools**: `player`, `agent`, `world`, `blocks`, `camera`, `system`, `minecraft_wiki`
 - **Building Tools**: `build_cube`, `build_sphere`, `build_cylinder`, `build_line`, etc.
+- **Wiki Integration**: Search Minecraft Wiki for Bedrock/Education Edition info
 - **Sequence Control**: Chain multiple tools with timing and error handling
 - **Cross-Tool Sequences**: Combine different tools in automated workflows
 
-## Sequence Examples
+## Usage Examples
 
-### Single-Tool Sequence
+### Wiki Search
 ```javascript
+// Step-by-step wiki search to avoid overwhelming responses
 {
   "action": "sequence",
   "steps": [
-    {"type": "move", "direction": "forward", "distance": 3, "wait_time": 1},
-    {"type": "turn", "direction": "right", "wait_time": 1}
+    {"type": "search", "query": "give command", "focus": "commands"},
+    {"type": "get_page_summary", "title": "Commands/give"},
+    {"type": "get_section", "title": "Commands/give", "section": "Syntax"}
   ]
 }
 ```
 
-### Cross-Tool Sequence
+### Building Sequence
 ```javascript
 {
   "steps": [
-    {"tool": "player", "type": "give_item", "item_id": "minecraft:diamond_sword"},
-    {"tool": "agent", "type": "move", "direction": "forward", "distance": 5, "wait_time": 2},
-    {"tool": "blocks", "type": "setblock", "x": 100, "y": 64, "z": 200, "block": "minecraft:diamond_block"}
+    {"tool": "player", "type": "teleport", "x": 0, "y": 70, "z": 0},
+    {"tool": "build_cube", "type": "build", "x1": -5, "y1": 70, "z1": -5, "x2": 5, "y2": 75, "z2": 5, "material": "diamond_block"},
+    {"tool": "camera", "type": "move_to", "x": 10, "y": 80, "z": 10, "look_at_x": 0, "look_at_y": 72, "look_at_z": 0}
   ]
 }
 ```
-
-### Error Handling
-- `on_error: "stop"` - Stop on error (default)
-- `on_error: "continue"` - Ignore errors and continue
-- `on_error: "retry"` - Retry failed steps
 
 ## Development
 
@@ -83,12 +81,23 @@ npm test         # Run test client
 }
 ```
 
-## Architecture
+## Tools
 
-- **Base**: `src/tools/base/tool.ts` - Shared functionality
-- **Core**: `src/tools/core/` - Player, agent, world, camera tools
-- **Building**: `src/tools/advanced/building/` - Construction tools
-- **Sequences**: Built-in support for all tools with timing control
+### Core Tools
+- `player` - Teleport, give items, gamemode, XP
+- `agent` - Move, build, mine, inventory management  
+- `world` - Time, weather, run commands
+- `blocks` - Place/fill blocks, query terrain
+- `camera` - Cinematic shots, smooth movement
+- `system` - Scoreboards, titles, action bars
+- `minecraft_wiki` - Search wiki for Bedrock/Education info
+- `sequence` - Chain multiple tools together
+
+### Building Tools
+- `build_cube`, `build_sphere`, `build_cylinder` - Basic shapes
+- `build_line`, `build_helix`, `build_torus` - Complex geometry  
+- `build_ellipsoid`, `build_paraboloid`, `build_hyperboloid` - Advanced shapes
+- `build_rotate`, `build_transform` - Copy and transform structures
 
 ## Requirements
 

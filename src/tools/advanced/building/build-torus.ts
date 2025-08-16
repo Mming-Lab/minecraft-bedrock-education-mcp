@@ -1,5 +1,8 @@
 import { BaseTool } from '../../base/tool';
 import { ToolCallResult, InputSchema } from '../../../types';
+import { executeBuildWithOptimization } from '../../../utils/integration/build-executor';
+import { calculateTorusPositions } from '../../../utils/geometry';
+import { BUILD_LIMITS } from '../../../utils/constants/build-limits';
 
 /**
  * トーラス（ドーナツ型）構造物を建築するツール
@@ -239,78 +242,21 @@ export class BuildTorusTool extends BaseTool {
                 }
             };
             
-            // トーラス形状の計算
-            const minorRadiusSquared = minorRadiusInt * minorRadiusInt;
-            const innerMinorRadius = hollow ? Math.max(0, minorRadiusInt - 1) : 0;
-            const innerMinorRadiusSquared = innerMinorRadius * innerMinorRadius;
             
-            for (let x = -totalRadius; x <= totalRadius; x++) {
-                const xSquared = x * x;
-                
-                for (let z = -totalRadius; z <= totalRadius; z++) {
-                    const zSquared = z * z;
-                    const distanceFromCenterSquared = xSquared + zSquared;
-                    
-                    // 中心からの距離を計算（平方根は1回のみ）
-                    const distanceFromCenter = Math.sqrt(distanceFromCenterSquared);
-                    const distanceFromTubeCenter = Math.abs(distanceFromCenter - majorRadiusInt);
-                    
-                    // 管の範囲外は早期終了
-                    if (distanceFromTubeCenter > minorRadiusInt) continue;
-                    
-                    // Y範囲を計算で限定
-                    const maxYSquared = minorRadiusSquared - (distanceFromTubeCenter * distanceFromTubeCenter);
-                    if (maxYSquared < 0) continue;
-                    
-                    const maxY = Math.floor(Math.sqrt(maxYSquared));
-                    
-                    for (let y = -maxY; y <= maxY; y++) {
-                        const tubeDistanceSquared = distanceFromTubeCenter * distanceFromTubeCenter + y * y;
-                        
-                        if (tubeDistanceSquared <= minorRadiusSquared &&
-                            (!hollow || tubeDistanceSquared >= innerMinorRadiusSquared)) {
-                            
-                            // 座標変換を適用
-                            const worldPos = transformCoordinates(x, y, z);
-                            
-                            commands.push(`setblock ${worldPos.x} ${worldPos.y} ${worldPos.z} ${blockId}`);
-                            blocksPlaced++;
-                        }
-                    }
-                }
-            }
+            // トーラスの座標を計算
+            const positions = calculateTorusPositions(center, majorRadiusInt, minorRadiusInt, hollow);
             
             // ブロック数制限チェック
-            if (commands.length > 8000) {
-                return this.createErrorResponse('Too many blocks to place (maximum 8000)');
+            if (positions.length > BUILD_LIMITS.TORUS) {
+                return this.createErrorResponse(`Too many blocks to place (maximum ${BUILD_LIMITS.TORUS.toLocaleString()})`);
             }
             
             try {
-                // Socket-BE APIを使用した実装
-                
-                // 基本的な実装：コマンド配列をSocket-BE API呼び出しに変換
-                for (const command of commands) {
-                    if (command.startsWith('setblock ')) {
-                        const parts = command.split(' ');
-                        if (parts.length >= 5) {
-                            const x = parseInt(parts[1]);
-                            const y = parseInt(parts[2]);
-                            const z = parseInt(parts[3]);
-                            const block = parts[4];
-                            
-                            await this.world.setBlock({x, y, z}, block);
-                            blocksPlaced++;
-                            
-                            // 制限チェック
-                            if (blocksPlaced > 5000) {
-                                return this.createErrorResponse('Too many blocks to place (maximum 5000)');
-                            }
-                        }
-                    }
-                }
-                
-                return this.createSuccessResponse(
-                    `${hollow ? 'Hollow' : 'Solid'} torus built with ${blockId} at center (${center.x},${center.y},${center.z}) major radius ${majorRadiusInt}, minor radius ${minorRadiusInt}. Axis: ${axis}. Placed ${blocksPlaced} blocks.`,
+                // 最適化されたビルド実行
+                const result = await executeBuildWithOptimization(
+                    this.world,
+                    positions,
+                    blockId,
                     {
                         type: 'torus',
                         center: center,
@@ -319,10 +265,19 @@ export class BuildTorusTool extends BaseTool {
                         material: blockId,
                         hollow: hollow,
                         axis: axis,
-                        blocksPlaced: blocksPlaced,
                         apiUsed: 'Socket-BE'
                     }
                 );
+                
+                if (!result.success) {
+                    return this.createErrorResponse(result.message);
+                }
+                
+                return {
+                    success: true,
+                    message: result.message,
+                    data: result.data
+                };
             } catch (buildError) {
                 return this.createErrorResponse(`Building error: ${buildError instanceof Error ? buildError.message : String(buildError)}`);
             }

@@ -1,5 +1,8 @@
 import { BaseTool } from '../../base/tool';
 import { ToolCallResult, InputSchema } from '../../../types';
+import { executeBuildWithOptimization } from '../../../utils/integration/build-executor';
+import { calculateLinePositions } from '../../../utils/geometry';
+import { BUILD_LIMITS } from '../../../utils/constants/build-limits';
 
 /**
  * 直線構造物を建築するツール
@@ -167,51 +170,47 @@ export class BuildLineTool extends BaseTool {
                 };
             }
             
-            // 直線上の点を計算
-            const steps = Math.ceil(distance);
+            // 直線の座標を計算
+            const positions = calculateLinePositions(start, end);
+            
+            if (positions.length > BUILD_LIMITS.LINE) {
+                return {
+                    success: false,
+                    message: `Too many blocks to place (maximum ${BUILD_LIMITS.LINE.toLocaleString()})`
+                };
+            }
+            
             // Socket-BE APIを使用してブロック配置
             if (!this.world) {
                 return { success: false, message: 'World not available. Ensure Minecraft is connected.' };
             }
 
             try {
-                const placedBlocks: Set<string> = new Set();
-                let blocksPlaced = 0;
-                
-                for (let i = 0; i <= steps; i++) {
-                    const t = steps === 0 ? 0 : i / steps;
-                    const x = Math.floor(start.x + (end.x - start.x) * t);
-                    const y = Math.floor(start.y + (end.y - start.y) * t);
-                    const z = Math.floor(start.z + (end.z - start.z) * t);
-                    
-                    // 重複する座標をチェック
-                    const coordKey = `${x},${y},${z}`;
-                    if (!placedBlocks.has(coordKey)) {
-                        placedBlocks.add(coordKey);
-                        await this.world.setBlock({x, y, z}, blockId);
-                        blocksPlaced++;
+                // 最適化されたビルド実行
+                const result = await executeBuildWithOptimization(
+                    this.world,
+                    positions,
+                    blockId,
+                    {
+                        type: 'line',
+                        from: start,
+                        to: end,
+                        material: blockId,
+                        apiUsed: 'Socket-BE'
                     }
-                }
+                );
                 
-                if (blocksPlaced > 100) {
+                if (!result.success) {
                     return {
                         success: false,
-                        message: 'Too many blocks to place (maximum 100)'
+                        message: result.message
                     };
                 }
 
                 return {
                     success: true,
-                    message: `Line built with ${blockId} from (${start.x},${start.y},${start.z}) to (${end.x},${end.y},${end.z}). Placed ${blocksPlaced} blocks.`,
-                    data: {
-                        type: 'line',
-                        from: start,
-                        to: end,
-                        material: blockId,
-                        length: distance,
-                        blocksPlaced: blocksPlaced,
-                        apiUsed: 'Socket-BE'
-                    }
+                    message: result.message,
+                    data: result.data
                 };
             } catch (error) {
                 return {

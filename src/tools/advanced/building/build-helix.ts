@@ -1,5 +1,8 @@
 import { BaseTool } from '../../base/tool';
 import { ToolCallResult, InputSchema } from '../../../types';
+import { executeBuildWithOptimization } from '../../../utils/integration/build-executor';
+import { calculateHelixPositions } from '../../../utils/geometry';
+import { BUILD_LIMITS } from '../../../utils/constants/build-limits';
 
 /**
  * ヘリックス（螺旋）構造物を建築するツール
@@ -296,118 +299,27 @@ export class BuildHelixTool extends BaseTool {
             const placedPositions = new Set<string>();
             
             // 螺旋の現在位置（ループ内で更新）
-            let currentX = center.x;
-            let currentY = center.y;
-            let currentZ = center.z;
             
-            // 真のBresenham螺旋: Midpoint circle + 3D line algorithm組み合わせ
-            
-            // 螺旋パラメータ
-            const totalSteps = Math.round(2 * Math.PI * radiusInt * turns); // 円周 × 回転数
-            
-            // 3D Bresenham line algorithm for height control (参考コード準拠)
-            const dx = 0; // X軸は円運動なので0
-            const dy = heightInt - 1; // Y軸の変化量
-            const dz = 0; // Z軸は円運動なので0
-            const dm = totalSteps; // 主軸 (螺旋ステップ数)
-            
-            let y1_err = Math.floor(dm / 2);
-            
-            // 円のBresenham準拠: 角度を離散化
-            const totalAngleSteps = Math.round(totalAngle * radiusInt / Math.PI); // 角度の離散化
-            
-            // 螺旋進行（ローカル座標系）
-            let localSpiralX = radiusInt; // 開始点 (ローカル座標の東側)
-            let localSpiralY = 0; // 高さの開始点
-            let localSpiralZ = 0; // 開始点 (ローカル座標の中心)
-            
-            // 最初のブロック配置（座標変換適用）
-            let worldPos = transformCoordinates(localSpiralX, localSpiralY, localSpiralZ);
-            commands.push(`setblock ${worldPos.x} ${worldPos.y} ${worldPos.z} ${blockId}`);
-            placedPositions.add(`${worldPos.x},${worldPos.y},${worldPos.z}`);
-            blocksPlaced++;
-            
-            // 円のMidpoint algorithm風に角度を進行
-            let angleStep = 0;
-            const maxAngleSteps = Math.round(totalAngle * 180 / Math.PI); // 度数で管理
-            
-            for (let step = 1; step < totalSteps && angleStep < maxAngleSteps; step++) {
-                // 角度進行 (Midpoint circle algorithm風)
-                const progress = step / totalSteps;
-                const currentAngle = progress * totalAngle * rotationDirection;
-                
-                // 次の円周位置 (ローカル座標系)
-                const nextLocalX = Math.round(radiusInt * Math.cos(currentAngle));
-                const nextLocalZ = Math.round(radiusInt * Math.sin(currentAngle));
-                
-                // 隣接性チェック: 前の位置から最大1ブロック差
-                const deltaX = Math.abs(nextLocalX - localSpiralX);
-                const deltaZ = Math.abs(nextLocalZ - localSpiralZ);
-                
-                // 隣接保証: 前の点から離れすぎている場合は中間点を補間
-                if (deltaX > 1 || deltaZ > 1) {
-                    // Bresenham line algorithmで中間点を補間
-                    const stepX = nextLocalX > localSpiralX ? 1 : (nextLocalX < localSpiralX ? -1 : 0);
-                    const stepZ = nextLocalZ > localSpiralZ ? 1 : (nextLocalZ < localSpiralZ ? -1 : 0);
-                    
-                    localSpiralX += stepX;
-                    localSpiralZ += stepZ;
-                } else {
-                    // 隣接している場合は直接移動
-                    localSpiralX = nextLocalX;
-                    localSpiralZ = nextLocalZ;
-                }
-                
-                // 3D Bresenham height progression (参考コード準拠)
-                y1_err -= dy;
-                if (y1_err < 0) {
-                    y1_err += dm;
-                    localSpiralY += 1; // 高さを1ブロック上昇
-                }
-                
-                // ブロック配置（座標変換適用）
-                worldPos = transformCoordinates(localSpiralX, localSpiralY, localSpiralZ);
-                const posKey = `${worldPos.x},${worldPos.y},${worldPos.z}`;
-                if (!placedPositions.has(posKey) && localSpiralY < heightInt) {
-                    placedPositions.add(posKey);
-                    commands.push(`setblock ${worldPos.x} ${worldPos.y} ${worldPos.z} ${blockId}`);
-                    blocksPlaced++;
-                }
-                
-                angleStep++;
-            }
+            // 螺旋の座標を計算
+            const positions = calculateHelixPositions(
+                center, 
+                heightInt, 
+                radiusInt, 
+                turns, 
+                axis as 'x' | 'y' | 'z'
+            );
             
             // ブロック数制限チェック
-            if (commands.length > 3000) {
-                return this.createErrorResponse('Too many blocks to place (maximum 3000)');
+            if (positions.length > BUILD_LIMITS.HELIX) {
+                return this.createErrorResponse(`Too many blocks to place (maximum ${BUILD_LIMITS.HELIX.toLocaleString()})`);
             }
             
             try {
-                // Socket-BE APIを使用した実装
-                
-                // 基本的な実装：コマンド配列をSocket-BE API呼び出しに変換
-                for (const command of commands) {
-                    if (command.startsWith('setblock ')) {
-                        const parts = command.split(' ');
-                        if (parts.length >= 5) {
-                            const x = parseInt(parts[1]);
-                            const y = parseInt(parts[2]);
-                            const z = parseInt(parts[3]);
-                            const block = parts[4];
-                            
-                            await this.world.setBlock({x, y, z}, block);
-                            blocksPlaced++;
-                            
-                            // 制限チェック
-                            if (blocksPlaced > 5000) {
-                                return this.createErrorResponse('Too many blocks to place (maximum 5000)');
-                            }
-                        }
-                    }
-                }
-                
-                return this.createSuccessResponse(
-                    `Helix built with ${blockId} at center (${center.x},${center.y},${center.z}) radius ${radiusInt}, height ${heightInt}, ${turns} turns, ${clockwise ? 'clockwise' : 'counter-clockwise'}. Axis: ${axis}, Direction: ${direction}, Chirality: ${chirality}. Placed ${blocksPlaced} blocks.`,
+                // 最適化されたビルド実行
+                const result = await executeBuildWithOptimization(
+                    this.world,
+                    positions,
+                    blockId,
                     {
                         type: 'helix',
                         center: center,
@@ -419,10 +331,19 @@ export class BuildHelixTool extends BaseTool {
                         axis: axis,
                         direction: direction,
                         chirality: chirality,
-                        blocksPlaced: blocksPlaced,
                         apiUsed: 'Socket-BE'
                     }
                 );
+                
+                if (!result.success) {
+                    return this.createErrorResponse(result.message);
+                }
+                
+                return {
+                    success: true,
+                    message: result.message,
+                    data: result.data
+                };
             } catch (buildError) {
                 return this.createErrorResponse(`Building error: ${buildError instanceof Error ? buildError.message : String(buildError)}`);
             }

@@ -1,5 +1,8 @@
 import { BaseTool } from '../../base/tool';
 import { ToolCallResult, InputSchema } from '../../../types';
+import { executeBuildWithOptimization } from '../../../utils/integration/build-executor';
+import { calculateHyperboloidPositions } from '../../../utils/geometry';
+import { BUILD_LIMITS } from '../../../utils/constants/build-limits';
 
 /**
  * ハイパーボロイド（冷却塔状）構造物を建築するツール
@@ -253,79 +256,23 @@ export class BuildHyperboloidTool extends BaseTool {
                         };
                 }
             };
-            const halfHeight = Math.floor(heightInt / 2);
             
-            // 双曲面の形状パラメータ
-            const a = waistRadiusInt; // 最小半径
-            const b = baseRadiusInt - waistRadiusInt; // 半径の変化幅
+            // 双曲面の座標を計算
+            const positions = calculateHyperboloidPositions(center, baseRadiusInt, heightInt, waistRadiusInt / baseRadiusInt, hollow);
             
-            for (let y = 0; y < heightInt; y++) {
-                // 中心からの距離 (-1 to 1 の範囲)
-                const t = (y - halfHeight) / halfHeight;
-                
-                // 双曲面の方程式: r(t) = a * sqrt(1 + (t*b/a)²)
-                const currentRadius = a * Math.sqrt(1 + (t * b / a) * (t * b / a));
-                const currentRadiusInt = Math.round(currentRadius);
-                const currentRadiusSquared = currentRadiusInt * currentRadiusInt;
-                
-                const innerRadius = hollow ? Math.max(0, currentRadiusInt - 1) : 0;
-                const innerRadiusSquared = innerRadius * innerRadius;
-                
-                for (let x = -currentRadiusInt; x <= currentRadiusInt; x++) {
-                    const xSquared = x * x;
-                    if (xSquared > currentRadiusSquared) continue;
-                    
-                    const maxZSquared = currentRadiusSquared - xSquared;
-                    const maxZ = Math.floor(Math.sqrt(maxZSquared));
-                    
-                    for (let z = -maxZ; z <= maxZ; z++) {
-                        const distanceSquared = xSquared + z * z;
-                        
-                        if (distanceSquared <= currentRadiusSquared &&
-                            (!hollow || distanceSquared >= innerRadiusSquared)) {
-                            // 座標変換を適用
-                            const worldPos = transformCoordinates(x, y, z);
-                            
-                            commands.push(`setblock ${worldPos.x} ${worldPos.y} ${worldPos.z} ${blockId}`);
-                            blocksPlaced++;
-                        }
-                    }
-                }
-            }
-            
-            if (commands.length > 1000) {
+            if (positions.length > BUILD_LIMITS.HYPERBOLOID) {
                 return {
                     success: false,
-                    message: 'Too many blocks to place (maximum 1000)'
+                    message: `Too many blocks to place (maximum ${BUILD_LIMITS.HYPERBOLOID.toLocaleString()})`
                 };
             }
             
             try {
-                // Socket-BE APIを使用した実装
-                let blocksPlaced = 0;
-                
-                // コマンド配列をSocket-BE API呼び出しに変換
-                for (const command of commands) {
-                    if (command.startsWith('setblock ')) {
-                        const parts = command.split(' ');
-                        if (parts.length >= 5) {
-                            const x = parseInt(parts[1]);
-                            const y = parseInt(parts[2]);
-                            const z = parseInt(parts[3]);
-                            const block = parts[4];
-                            
-                            await this.world.setBlock({x, y, z}, block);
-                            blocksPlaced++;
-                            
-                            if (blocksPlaced > 5000) {
-                                return this.createErrorResponse('Too many blocks to place (maximum 5000)');
-                            }
-                        }
-                    }
-                }
-                
-                return this.createSuccessResponse(
-                    `${hollow ? 'Hollow' : 'Solid'} hyperboloid built with ${blockId} at center (${center.x},${center.y},${center.z}) with base radius ${baseRadiusInt}, waist radius ${waistRadiusInt}, and height ${heightInt}. Axis: ${axis}. Placed ${blocksPlaced} blocks.`,
+                // 最適化されたビルド実行
+                const result = await executeBuildWithOptimization(
+                    this.world,
+                    positions,
+                    blockId,
                     {
                         type: 'hyperboloid',
                         center: center,
@@ -335,10 +282,19 @@ export class BuildHyperboloidTool extends BaseTool {
                         material: blockId,
                         hollow: hollow,
                         axis: axis,
-                        blocksPlaced: blocksPlaced,
                         apiUsed: 'Socket-BE'
                     }
                 );
+                
+                if (!result.success) {
+                    return this.createErrorResponse(result.message);
+                }
+                
+                return {
+                    success: true,
+                    message: result.message,
+                    data: result.data
+                };
             } catch (buildError) {
                 return this.createErrorResponse(`Building error: ${buildError instanceof Error ? buildError.message : String(buildError)}`);
             }

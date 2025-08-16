@@ -1,5 +1,8 @@
 import { BaseTool } from '../../base/tool';
 import { ToolCallResult, InputSchema } from '../../../types';
+import { executeBuildWithOptimization } from '../../../utils/integration/build-executor';
+import { calculateCylinderPositions } from '../../../utils/geometry';
+import { BUILD_LIMITS } from '../../../utils/constants/build-limits';
 
 /**
  * 円柱構造物を建築するツール
@@ -219,96 +222,41 @@ export class BuildCylinderTool extends BaseTool {
             // ブロックIDの正規化
             const blockId = this.normalizeBlockId(material);
             
-            const commands: string[] = [];
-            let blocksPlaced = 0;
+            // 円柱の座標を計算
+            const positions = calculateCylinderPositions(center, radiusInt, heightInt, axis as 'x' | 'y' | 'z', hollow);
             
-            // 円柱の各点を計算
-            const radiusSquared = radiusInt * radiusInt;
-            const innerRadius = hollow ? Math.max(0, radiusInt - 1) : 0;
-            const innerRadiusSquared = innerRadius * innerRadius;
-            
-            for (let i = 0; i < heightInt; i++) {
-                for (let u = -radiusInt; u <= radiusInt; u++) {
-                    const uSquared = u * u;
-                    if (uSquared > radiusSquared) continue;
-                    
-                    const maxVSquared = radiusSquared - uSquared;
-                    const maxV = Math.floor(Math.sqrt(maxVSquared));
-                    
-                    for (let v = -maxV; v <= maxV; v++) {
-                        const distanceSquared = uSquared + v * v;
-                        
-                        if (distanceSquared <= radiusSquared &&
-                            (!hollow || distanceSquared >= innerRadiusSquared)) {
-                            
-                            let x, y, z;
-                            
-                            // 軸に応じて座標を変換
-                            if (axis === 'y') {
-                                x = center.x + u;
-                                y = center.y + i;
-                                z = center.z + v;
-                            } else if (axis === 'x') {
-                                x = center.x + i;
-                                y = center.y + u;
-                                z = center.z + v;
-                            } else { // axis === 'z'
-                                x = center.x + u;
-                                y = center.y + v;
-                                z = center.z + i;
-                            }
-                            
-                            commands.push(`setblock ${x} ${y} ${z} ${blockId}`);
-                            blocksPlaced++;
-                        }
-                    }
-                }
-            }
-            
-            // ブロック数制限チェック
-            if (commands.length > 10000) {
-                return this.createErrorResponse('Too many blocks to place (maximum 10000)');
+            // ブロック数制限チェック（最適化効果を考慮）
+            if (positions.length > BUILD_LIMITS.CYLINDER) {
+                return this.createErrorResponse(`Too many blocks to place (maximum ${BUILD_LIMITS.CYLINDER.toLocaleString()})`);
             }
             
             try {
-                // Socket-BE APIを使用した実装
-                let blocksPlaced = 0;
-                
-                // 基本的な実装：コマンド配列をSocket-BE API呼び出しに変換
-                for (const command of commands) {
-                    if (command.startsWith('setblock ')) {
-                        const parts = command.split(' ');
-                        if (parts.length >= 5) {
-                            const x = parseInt(parts[1]);
-                            const y = parseInt(parts[2]);
-                            const z = parseInt(parts[3]);
-                            const block = parts[4];
-                            
-                            await this.world.setBlock({x, y, z}, block);
-                            blocksPlaced++;
-                            
-                            // 制限チェック
-                            if (blocksPlaced > 5000) {
-                                return this.createErrorResponse('Too many blocks to place (maximum 5000)');
-                            }
-                        }
-                    }
-                }
-                
-                return this.createSuccessResponse(
-                    `${hollow ? 'Hollow' : 'Solid'} cylinder built with ${blockId} at center (${center.x},${center.y},${center.z}) radius ${radiusInt}, height ${heightInt}, axis ${axis}. Placed ${blocksPlaced} blocks.`,
+                // 最適化されたビルド実行
+                const result = await executeBuildWithOptimization(
+                    this.world,
+                    positions,
+                    blockId,
                     {
                         type: 'cylinder',
                         center: center,
                         radius: radiusInt,
                         height: heightInt,
-                        material: blockId,
-                        hollow: hollow,
                         axis: axis,
-                        blocksPlaced: blocksPlaced,
+                        hollow: hollow,
+                        material: blockId,
                         apiUsed: 'Socket-BE'
                     }
                 );
+                
+                if (!result.success) {
+                    return this.createErrorResponse(result.message);
+                }
+                
+                return {
+                    success: true,
+                    message: result.message,
+                    data: result.data
+                };
             } catch (buildError) {
                 return this.createErrorResponse(`Building error: ${buildError instanceof Error ? buildError.message : String(buildError)}`);
             }

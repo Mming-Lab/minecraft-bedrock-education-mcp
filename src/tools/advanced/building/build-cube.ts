@@ -1,5 +1,9 @@
 import { BaseTool } from '../../base/tool';
 import { ToolCallResult, InputSchema } from '../../../types';
+import { executeBuildWithOptimization } from '../../../utils/integration/build-executor';
+import { calculateCubePositions } from '../../../utils/geometry';
+import { DirectionalParams } from '../../../utils/integration/rotation-transformer';
+import { BUILD_LIMITS } from '../../../utils/constants/build-limits';
 
 /**
  * 立方体構造物を建築するツール
@@ -80,6 +84,12 @@ export class BuildCubeTool extends BaseTool {
                 type: 'boolean',
                 description: 'Create hollow cube (default: false)',
                 default: false
+            },
+            direction: {
+                type: 'string',
+                description: 'Orientation direction: +x, +y, +z, -x, -y, -z, or custom for advanced rotation',
+                enum: ['+x', '+y', '+z', '-x', '-y', '-z', 'custom'],
+                default: '+y'
             }
         },
         required: ['x1', 'y1', 'z1', 'x2', 'y2', 'z2']
@@ -127,9 +137,10 @@ export class BuildCubeTool extends BaseTool {
         z2: number;
         material?: string;
         hollow?: boolean;
+        direction?: string;
     }): Promise<ToolCallResult> {
         try {
-            const { action = 'build', x1, y1, z1, x2, y2, z2, material = 'minecraft:stone', hollow = false } = args;
+            const { action = 'build', x1, y1, z1, x2, y2, z2, material = 'minecraft:stone', hollow = false, direction = '+y' } = args;
             
             // actionパラメータをサポート（現在は build のみ）
             if (action !== 'build') {
@@ -163,7 +174,7 @@ export class BuildCubeTool extends BaseTool {
                 };
             }
             
-            // Socket-BE APIを使用してブロック配置
+            // Socket-BE API接続確認
             if (!this.world) {
                 return { success: false, message: 'World not available. Ensure Minecraft is connected.' };
             }
@@ -175,60 +186,46 @@ export class BuildCubeTool extends BaseTool {
             }
 
             try {
-                let blocksPlaced = 0;
+                // 立方体の座標を計算
+                const corner1 = { x: coords.x1, y: coords.y1, z: coords.z1 };
+                const corner2 = { x: coords.x2, y: coords.y2, z: coords.z2 };
+                const positions = calculateCubePositions(corner1, corner2, hollow);
                 
-                if (hollow) {
-                    // 中空立方体: 外壁を作成してから内部を削除
-                    // 1. まず外壁全体を作成
-                    blocksPlaced = await this.world.fillBlocks(
-                        {x: coords.x1, y: coords.y1, z: coords.z1},
-                        {x: coords.x2, y: coords.y2, z: coords.z2},
-                        blockId
-                    );
-                    
-                    // 2. 内部を空洞にする（1ブロック内側）
-                    const innerX1 = Math.min(coords.x1, coords.x2) + 1;
-                    const innerY1 = Math.min(coords.y1, coords.y2) + 1;
-                    const innerZ1 = Math.min(coords.z1, coords.z2) + 1;
-                    const innerX2 = Math.max(coords.x1, coords.x2) - 1;
-                    const innerY2 = Math.max(coords.y1, coords.y2) - 1;
-                    const innerZ2 = Math.max(coords.z1, coords.z2) - 1;
-                    
-                    // 内部に空洞があるかチェック
-                    if (innerX1 <= innerX2 && innerY1 <= innerY2 && innerZ1 <= innerZ2) {
-                        const removedBlocks = await this.world.fillBlocks(
-                            {x: innerX1, y: innerY1, z: innerZ1},
-                            {x: innerX2, y: innerY2, z: innerZ2},
-                            'minecraft:air'
-                        );
-                        blocksPlaced -= removedBlocks;
-                    }
-                } else {
-                    // 実体立方体: Socket-BE fillBlocks使用
-                    blocksPlaced = await this.world.fillBlocks(
-                        {x: coords.x1, y: coords.y1, z: coords.z1},
-                        {x: coords.x2, y: coords.y2, z: coords.z2},
-                        blockId
-                    );
+                // 大きな立方体の場合は制限（最適化効果を考慮）
+                if (positions.length > BUILD_LIMITS.CUBE) {
+                    return {
+                        success: false,
+                        message: `Too many blocks to place (maximum ${BUILD_LIMITS.CUBE.toLocaleString()})`
+                    };
                 }
-
-                return {
-                    success: true,
-                    message: `${hollow ? 'Hollow' : 'Solid'} cube built with ${blockId} from (${coords.x1},${coords.y1},${coords.z1}) to (${coords.x2},${coords.y2},${coords.z2}). Placed ${blocksPlaced} blocks.`,
-                    data: {
+                
+                // 方向指定パラメータ
+                const directionalParams: DirectionalParams = {
+                    direction: direction as any
+                };
+                
+                // 最適化されたビルド実行（回転対応）
+                const result = await executeBuildWithOptimization(
+                    this.world,
+                    positions,
+                    blockId,
+                    {
                         type: 'cube',
-                        from: { x: coords.x1, y: coords.y1, z: coords.z1 },
-                        to: { x: coords.x2, y: coords.y2, z: coords.z2 },
+                        from: corner1,
+                        to: corner2,
                         material: blockId,
                         hollow: hollow,
-                        volume: blocksPlaced,
+                        direction: direction,
                         apiUsed: 'Socket-BE'
-                    }
-                };
-            } catch (error) {
+                    },
+                    directionalParams
+                );
+                
+                return result;
+            } catch (buildError) {
                 return {
                     success: false,
-                    message: `Building error: ${error instanceof Error ? error.message : String(error)}`
+                    message: `Building error: ${buildError instanceof Error ? buildError.message : String(buildError)}`
                 };
             }
 

@@ -1,5 +1,8 @@
 import { BaseTool } from '../../base/tool';
 import { ToolCallResult, InputSchema } from '../../../types';
+import { executeBuildWithOptimization } from '../../../utils/integration/build-executor';
+import { calculateEllipsoidPositions } from '../../../utils/geometry';
+import { BUILD_LIMITS } from '../../../utils/constants/build-limits';
 
 /**
  * 楕円体構造物を建築するツール
@@ -217,84 +220,21 @@ export class BuildEllipsoidTool extends BaseTool {
             const radiusYSquared = radiusYInt * radiusYInt;
             const radiusZSquared = radiusZInt * radiusZInt;
             
-            const innerRadiusX = hollow ? Math.max(1, radiusXInt - 1) : 1;
-            const innerRadiusY = hollow ? Math.max(1, radiusYInt - 1) : 1;
-            const innerRadiusZ = hollow ? Math.max(1, radiusZInt - 1) : 1;
-            const innerRadiusXSquared = innerRadiusX * innerRadiusX;
-            const innerRadiusYSquared = innerRadiusY * innerRadiusY;
-            const innerRadiusZSquared = innerRadiusZ * innerRadiusZ;
             
-            for (let x = -radiusXInt; x <= radiusXInt; x++) {
-                const xTerm = (x * x * radiusYSquared * radiusZSquared);
-                
-                for (let y = -radiusYInt; y <= radiusYInt; y++) {
-                    const yTerm = (y * y * radiusXSquared * radiusZSquared);
-                    const xyTerm = xTerm + yTerm;
-                    
-                    for (let z = -radiusZInt; z <= radiusZInt; z++) {
-                        const zTerm = (z * z * radiusXSquared * radiusYSquared);
-                        
-                        // 楕円体の方程式: (x/a)² + (y/b)² + (z/c)² ≤ 1
-                        // 整数演算に変換: x²b²c² + y²a²c² + z²a²b² ≤ a²b²c²
-                        const distance = xyTerm + zTerm;
-                        const threshold = radiusXSquared * radiusYSquared * radiusZSquared;
-                        
-                        if (distance <= threshold) {
-                            let isInside = true;
-                            
-                            if (hollow) {
-                                const innerDistance = (x * x * innerRadiusYSquared * innerRadiusZSquared) +
-                                    (y * y * innerRadiusXSquared * innerRadiusZSquared) +
-                                    (z * z * innerRadiusXSquared * innerRadiusYSquared);
-                                const innerThreshold = innerRadiusXSquared * innerRadiusYSquared * innerRadiusZSquared;
-                                isInside = innerDistance >= innerThreshold;
-                            }
-                            
-                            if (isInside) {
-                                const worldX = center.x + x;
-                                const worldY = center.y + y;
-                                const worldZ = center.z + z;
-                                
-                                commands.push(`setblock ${worldX} ${worldY} ${worldZ} ${blockId}`);
-                                blocksPlaced++;
-                            }
-                        }
-                    }
-                }
-            }
+            // 楕円体の座標を計算
+            const positions = calculateEllipsoidPositions(center, radiusXInt, radiusYInt, radiusZInt, hollow);
             
             // ブロック数制限チェック
-            if (commands.length > 10000) {
-                return this.createErrorResponse('Too many blocks to place (maximum 10000)');
+            if (positions.length > BUILD_LIMITS.ELLIPSOID) {
+                return this.createErrorResponse(`Too many blocks to place (maximum ${BUILD_LIMITS.ELLIPSOID.toLocaleString()})`);
             }
             
             try {
-                // Socket-BE APIを使用した実装
-                let blocksPlaced = 0;
-                
-                // 基本的な実装：コマンド配列をSocket-BE API呼び出しに変換
-                for (const command of commands) {
-                    if (command.startsWith('setblock ')) {
-                        const parts = command.split(' ');
-                        if (parts.length >= 5) {
-                            const x = parseInt(parts[1]);
-                            const y = parseInt(parts[2]);
-                            const z = parseInt(parts[3]);
-                            const block = parts[4];
-                            
-                            await this.world.setBlock({x, y, z}, block);
-                            blocksPlaced++;
-                            
-                            // 制限チェック
-                            if (blocksPlaced > 5000) {
-                                return this.createErrorResponse('Too many blocks to place (maximum 5000)');
-                            }
-                        }
-                    }
-                }
-                
-                return this.createSuccessResponse(
-                    `${hollow ? 'Hollow' : 'Solid'} ellipsoid built with ${blockId} at center (${center.x},${center.y},${center.z}) radii (${radiusXInt},${radiusYInt},${radiusZInt}). Placed ${blocksPlaced} blocks.`,
+                // 最適化されたビルド実行
+                const result = await executeBuildWithOptimization(
+                    this.world,
+                    positions,
+                    blockId,
                     {
                         type: 'ellipsoid',
                         center: center,
@@ -303,10 +243,19 @@ export class BuildEllipsoidTool extends BaseTool {
                         radiusZ: radiusZInt,
                         material: blockId,
                         hollow: hollow,
-                        blocksPlaced: blocksPlaced,
                         apiUsed: 'Socket-BE'
                     }
                 );
+                
+                if (!result.success) {
+                    return this.createErrorResponse(result.message);
+                }
+                
+                return {
+                    success: true,
+                    message: result.message,
+                    data: result.data
+                };
             } catch (buildError) {
                 return this.createErrorResponse(`Building error: ${buildError instanceof Error ? buildError.message : String(buildError)}`);
             }

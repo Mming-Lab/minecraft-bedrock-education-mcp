@@ -1,5 +1,8 @@
 import { BaseTool } from '../../base/tool';
 import { ToolCallResult, InputSchema } from '../../../types';
+import { executeBuildWithOptimization } from '../../../utils/integration/build-executor';
+import { calculateParaboloidPositions } from '../../../utils/geometry';
+import { BUILD_LIMITS } from '../../../utils/constants/build-limits';
 
 /**
  * パラボロイド（衛星皿状）構造物を建築するツール
@@ -239,76 +242,29 @@ export class BuildParaboloidTool extends BaseTool {
             };
             const radiusSquared = radiusInt * radiusInt;
             
-            // パラボロイドの方程式: z = (x² + y²) / (4 * focal_length)
-            // focal_lengthを調整してheightに合わせる
-            const focalLength = radiusSquared / (4 * heightInt);
             
-            for (let y = 0; y < heightInt; y++) {
-                // 現在の高さでのパラボラ半径を計算
-                const currentRadiusSquared = 4 * focalLength * y;
-                const currentRadius = Math.sqrt(currentRadiusSquared);
-                const currentRadiusInt = Math.floor(currentRadius);
-                
-                if (currentRadiusInt > radiusInt) continue; // 最大半径を超えた場合はスキップ
-                
-                const innerRadius = hollow ? Math.max(0, currentRadiusInt - 1) : 0;
-                const innerRadiusSquared = innerRadius * innerRadius;
-                
-                for (let x = -currentRadiusInt; x <= currentRadiusInt; x++) {
-                    const xSquared = x * x;
-                    if (xSquared > currentRadiusSquared) continue;
-                    
-                    const maxZSquared = currentRadiusSquared - xSquared;
-                    const maxZ = Math.floor(Math.sqrt(maxZSquared));
-                    
-                    for (let z = -maxZ; z <= maxZ; z++) {
-                        const distanceSquared = xSquared + z * z;
-                        
-                        if (distanceSquared <= currentRadiusSquared &&
-                            (!hollow || distanceSquared >= innerRadiusSquared)) {
-                            // 座標変換を適用
-                            const worldPos = transformCoordinates(x, y, z);
-                            
-                            commands.push(`setblock ${worldPos.x} ${worldPos.y} ${worldPos.z} ${blockId}`);
-                            blocksPlaced++;
-                        }
-                    }
-                }
-            }
+            // 放物面の座標を計算
+            const positions = calculateParaboloidPositions(
+                center, 
+                radiusInt, 
+                heightInt, 
+                direction as 'up' | 'down', 
+                hollow
+            );
             
-            if (commands.length > 1000) {
+            if (positions.length > BUILD_LIMITS.PARABOLOID) {
                 return {
                     success: false,
-                    message: 'Too many blocks to place (maximum 1000)'
+                    message: `Too many blocks to place (maximum ${BUILD_LIMITS.PARABOLOID.toLocaleString()})`
                 };
             }
             
             try {
-                // Socket-BE APIを使用した実装
-                let blocksPlaced = 0;
-                
-                // コマンド配列をSocket-BE API呼び出しに変換
-                for (const command of commands) {
-                    if (command.startsWith('setblock ')) {
-                        const parts = command.split(' ');
-                        if (parts.length >= 5) {
-                            const x = parseInt(parts[1]);
-                            const y = parseInt(parts[2]);
-                            const z = parseInt(parts[3]);
-                            const block = parts[4];
-                            
-                            await this.world.setBlock({x, y, z}, block);
-                            blocksPlaced++;
-                            
-                            if (blocksPlaced > 5000) {
-                                return this.createErrorResponse('Too many blocks to place (maximum 5000)');
-                            }
-                        }
-                    }
-                }
-                
-                return this.createSuccessResponse(
-                    `${hollow ? 'Hollow' : 'Solid'} paraboloid built with ${blockId} at center (${center.x},${center.y},${center.z}) with radius ${radiusInt} and height ${heightInt}. Axis: ${axis}, Direction: ${direction}. Placed ${blocksPlaced} blocks.`,
+                // 最適化されたビルド実行
+                const result = await executeBuildWithOptimization(
+                    this.world,
+                    positions,
+                    blockId,
                     {
                         type: 'paraboloid',
                         center: center,
@@ -318,10 +274,19 @@ export class BuildParaboloidTool extends BaseTool {
                         hollow: hollow,
                         axis: axis,
                         direction: direction,
-                        blocksPlaced: blocksPlaced,
                         apiUsed: 'Socket-BE'
                     }
                 );
+                
+                if (!result.success) {
+                    return this.createErrorResponse(result.message);
+                }
+                
+                return {
+                    success: true,
+                    message: result.message,
+                    data: result.data
+                };
             } catch (buildError) {
                 return this.createErrorResponse(`Building error: ${buildError instanceof Error ? buildError.message : String(buildError)}`);
             }

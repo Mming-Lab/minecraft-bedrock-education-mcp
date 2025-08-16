@@ -1,5 +1,9 @@
 import { BaseTool } from '../../base/tool';
 import { ToolCallResult, InputSchema } from '../../../types';
+import { executeBuildWithOptimization } from '../../../utils/integration/build-executor';
+import { calculateSpherePositions } from '../../../utils/geometry';
+import { DirectionalParams } from '../../../utils/integration/rotation-transformer';
+import { BUILD_LIMITS } from '../../../utils/constants/build-limits';
 
 /**
  * 球体構造物を建築するツール
@@ -74,6 +78,12 @@ export class BuildSphereTool extends BaseTool {
                 type: 'boolean',
                 description: 'Make it hollow (true) for sphere shell/dome, or solid (false) for full sphere',
                 default: false
+            },
+            direction: {
+                type: 'string',
+                description: 'Orientation direction: +x, +y, +z, -x, -y, -z, or custom for advanced rotation',
+                enum: ['+x', '+y', '+z', '-x', '-y', '-z', 'custom'],
+                default: '+y'
             }
         },
         required: ['centerX', 'centerY', 'centerZ', 'radius']
@@ -118,6 +128,7 @@ export class BuildSphereTool extends BaseTool {
         radius: number;
         material?: string;
         hollow?: boolean;
+        direction?: string;
     }): Promise<ToolCallResult> {
         try {
             // Socket-BE API接続確認
@@ -125,7 +136,7 @@ export class BuildSphereTool extends BaseTool {
                 return { success: false, message: "World not available. Ensure Minecraft is connected." };
             }
 
-            const { action = 'build', centerX, centerY, centerZ, radius, material = 'minecraft:stone', hollow = false } = args;
+            const { action = 'build', centerX, centerY, centerZ, radius, material = 'minecraft:stone', hollow = false, direction = '+y' } = args;
             
             // actionパラメータをサポート（現在は build のみ）
             if (action !== 'build') {
@@ -162,57 +173,40 @@ export class BuildSphereTool extends BaseTool {
             }
             
             try {
-                let blocksPlaced = 0;
+                // 球体の座標を計算
+                const positions = calculateSpherePositions(center, radius, hollow);
                 
-                // Socket-BE APIで球体の各点を配置
-                for (let x = center.x - radius; x <= center.x + radius; x++) {
-                    for (let y = center.y - radius; y <= center.y + radius; y++) {
-                        for (let z = center.z - radius; z <= center.z + radius; z++) {
-                            const distance = Math.sqrt(
-                                Math.pow(x - center.x, 2) + 
-                                Math.pow(y - center.y, 2) + 
-                                Math.pow(z - center.z, 2)
-                            );
-                            
-                            let shouldPlace = false;
-                            
-                            if (hollow) {
-                                // 中空の球体：表面のみ
-                                shouldPlace = distance <= radius && distance >= radius - 1;
-                            } else {
-                                // 実体の球体：内部も含む
-                                shouldPlace = distance <= radius;
-                            }
-                            
-                            if (shouldPlace) {
-                                await this.world.setBlock({x, y, z}, blockId);
-                                blocksPlaced++;
-                                
-                                // 大きな球体の場合は進捗制限
-                                if (blocksPlaced > 1000) {
-                                    return {
-                                        success: false,
-                                        message: 'Too many blocks to place (maximum 1000)'
-                                    };
-                                }
-                            }
-                        }
-                    }
+                // 大きな球体の場合は制限（最適化効果を考慮）
+                if (positions.length > BUILD_LIMITS.SPHERE) {
+                    return {
+                        success: false,
+                        message: `Too many blocks to place (maximum ${BUILD_LIMITS.SPHERE.toLocaleString()})`
+                    };
                 }
-
-                return {
-                    success: true,
-                    message: `${hollow ? 'Hollow' : 'Solid'} sphere built with ${blockId} at center (${center.x},${center.y},${center.z}) with radius ${radius}. Placed ${blocksPlaced} blocks.`,
-                    data: {
+                
+                // 方向指定パラメータ
+                const directionalParams: DirectionalParams = {
+                    direction: direction as any
+                };
+                
+                // 最適化されたビルド実行（回転対応）
+                const result = await executeBuildWithOptimization(
+                    this.world,
+                    positions,
+                    blockId,
+                    {
                         type: 'sphere',
                         center: center,
                         radius: radius,
                         material: blockId,
                         hollow: hollow,
-                        blocksPlaced: blocksPlaced,
+                        direction: direction,
                         apiUsed: 'Socket-BE'
-                    }
-                };
+                    },
+                    directionalParams
+                );
+                
+                return result;
             } catch (buildError) {
                 return {
                     success: false,

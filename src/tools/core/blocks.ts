@@ -8,7 +8,7 @@ import { SetBlockMode, FillBlocksMode } from 'socket-be';
  */
 export class BlocksTool extends BaseTool {
     readonly name = 'blocks';
-    readonly description = 'Block operations: placement, area filling, terrain queries, single blocks, large areas, surface detection';
+    readonly description = 'Block operations: single block placement, area filling, terrain analysis. Actions: set_block(single), fill_area(large_regions), get_top_solid_block(surface_level), query_block_data(block_info). Perfect for construction, terraforming, or analyzing terrain. Examples: set_block(x,y,z,stone), fill_area(x1,y1,z1 to x2,y2,z2,dirt), supports replace/keep/destroy modes';
     
     readonly inputSchema: InputSchema = {
         type: 'object',

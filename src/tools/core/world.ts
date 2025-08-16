@@ -8,7 +8,7 @@ import { WeatherType } from 'socket-be';
  */
 export class WorldTool extends BaseTool {
     readonly name = 'world';
-    readonly description = 'World management: time, weather, environment, day/night cycles, world queries, connections';
+    readonly description = 'World management: control time/weather/environment. Actions: set_time(day/night/specific_time), set_weather(clear/rain/thunder), set_difficulty(peaceful/easy/normal/hard), set_spawn(coordinates), query_info(world_stats). Perfect for setting scene atmosphere, testing conditions, or creating specific environments. Examples: dawn=0, noon=6000, dusk=12000, midnight=18000';
     
     readonly inputSchema: InputSchema = {
         type: 'object',

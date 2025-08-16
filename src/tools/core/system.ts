@@ -7,7 +7,7 @@ import { ToolCallResult, InputSchema } from '../../types';
  */
 export class SystemTool extends BaseTool {
     readonly name = 'system';
-    readonly description = 'System features: scoreboards, screen displays (titles, action bars), player UI, game management';
+    readonly description = 'System features: scoreboards (create/edit/delete objectives), screen displays (titles/subtitles/action_bars), player UI notifications. Actions: scoreboard_create/edit/delete, title_show(big_text), subtitle_show(small_text), actionbar_show(bottom_message). Perfect for displaying game stats, notifications, or creating UI elements';
     
     readonly inputSchema: InputSchema = {
         type: 'object',

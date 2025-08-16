@@ -8,7 +8,7 @@ import { AgentDirection } from 'socket-be';
  */
 export class AgentTool extends BaseTool {
     readonly name = 'agent';
-    readonly description = 'Agent control: movement, building, mining, inventory, exploration, construction, resource gathering';
+    readonly description = 'Agent automation: move/turn/teleport agent, mine/place blocks, inventory management, item collection/dropping, block inspection. Perfect for automated building, resource gathering, exploration. Actions: move(forward/back/left/right), teleport(coordinates), mine_block(direction), place_block(slot+direction), get_inventory, collect_item, attack';
     
     readonly inputSchema: InputSchema = {
         type: 'object',

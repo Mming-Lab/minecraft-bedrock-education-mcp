@@ -4,8 +4,8 @@
 
 A TypeScript MCP server for controlling Minecraft Bedrock Edition and Education Edition.
 
-<a href="https://glama.ai/mcp/servers/@Mming-Lab/minecraft-bedrock-education-mcp">
-  <img width="380" height="200" src="https://glama.ai/mcp/servers/@Mming-Lab/minecraft-bedrock-education-mcp/badge" alt="Minecraft Bedrock Education MCP server" />
+<a href="https://glama.ai/mcp/servers/@Mming-Lab/minecraft-bedrock-mcp-server">
+  <img width="380" height="200" src="https://glama.ai/mcp/servers/@Mming-Lab/minecraft-bedrock-mcp-server/badge" alt="Minecraft Bedrock Education MCP server" />
 </a>
 
 ## Features

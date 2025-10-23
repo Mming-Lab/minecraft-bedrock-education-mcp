@@ -106,9 +106,36 @@ npm test         # Run test client
 
 ### Building Tools
 - `build_cube`, `build_sphere`, `build_cylinder` - Basic shapes
-- `build_line`, `build_helix`, `build_torus` - Complex geometry  
+- `build_line`, `build_helix`, `build_torus` - Complex geometry
 - `build_ellipsoid`, `build_paraboloid`, `build_hyperboloid` - Advanced shapes
+- `build_bezier` - Smooth Bezier curves (bridges, arches, decorative paths) 🆕
 - `build_rotate`, `build_transform` - Copy and transform structures
+
+## Multilingual Support (i18n)
+
+Error messages support English and Japanese:
+
+```bash
+# Start with Japanese
+npm start -- --lang=ja
+
+# Start with English
+npm start -- --lang=en
+
+# Auto-detect (system language)
+npm start
+```
+
+Claude Desktop configuration:
+```json
+{
+  "mcpServers": {
+    "minecraft-bedrock-education": {
+      "args": ["path/to/dist/server.js", "--lang=ja"]
+    }
+  }
+}
+```
 
 ## Requirements
 

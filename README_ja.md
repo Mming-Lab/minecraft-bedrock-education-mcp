@@ -135,6 +135,32 @@ MCPクライアント設定でポートを指定：
 }
 ```
 
+## 多言語対応
+
+エラーメッセージを英語・日本語で切り替えられます：
+
+```bash
+# 日本語で起動
+npm start -- --lang=ja
+
+# 英語で起動
+npm start -- --lang=en
+
+# 自動検出（システム言語）
+npm start
+```
+
+Claude Desktop設定で言語指定：
+```json
+{
+  "mcpServers": {
+    "minecraft-bedrock-education": {
+      "args": ["path/to/dist/server.js", "--lang=ja"]
+    }
+  }
+}
+```
+
 ## 必要環境
 
 - Node.js 16+

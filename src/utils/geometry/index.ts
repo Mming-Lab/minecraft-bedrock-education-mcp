@@ -16,5 +16,11 @@ export * from './torus-calculator';
 export * from './paraboloid-calculator';
 export * from './hyperboloid-calculator';
 
+// 曲線
+export * from './bezier-calculator';
+
+// 座標ユーティリティ
+export * from './coordinate-utils';
+
 // 型定義の再エクスポート
 export type { Position } from '../block-optimizer';

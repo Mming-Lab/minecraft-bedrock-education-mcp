@@ -21,6 +21,7 @@ import { BuildHelixTool } from './tools/advanced/building/build-helix';
 import { BuildEllipsoidTool } from './tools/advanced/building/build-ellipsoid';
 import { BuildRotateTool } from './tools/advanced/building/build-rotate';
 import { BuildTransformTool } from './tools/advanced/building/build-transform';
+import { BuildBezierTool } from './tools/advanced/building/build-bezier';
 
 // Socket-BE Core API ツール（推奨）
 import { AgentTool } from './tools/core/agent';
@@ -254,8 +255,9 @@ export class MinecraftMCPServer {
             new BuildRotateTool(),         // ✅ 基本動作
             new BuildTransformTool(),      // ✅ 基本動作
             new BuildTorusTool(),          // ✅ 修正完了
-            new BuildHelixTool(),          // ✅ 修正完了  
+            new BuildHelixTool(),          // ✅ 修正完了
             new BuildEllipsoidTool(),      // ✅ 修正完了
+            new BuildBezierTool(),         // ✅ 新規追加（可変制御点ベジェ曲線）
             
         ];
         

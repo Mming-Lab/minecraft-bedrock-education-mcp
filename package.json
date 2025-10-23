@@ -1,15 +1,15 @@
 {
-  "name": "minecraft-bedrock-mcp-server",
+  "name": "minecraft-bedrock-education-mcp",
   "version": "1.0.0",
-  "description": "TypeScript-based MCP server for controlling Minecraft Bedrock Edition via WebSocket with hierarchical tools for player, agent, world, and building operations",
+  "description": "TypeScript-based MCP server for controlling Minecraft Bedrock Edition and Education Edition via WebSocket with hierarchical tools for player, agent, world, and building operations",
   "main": "dist/server.js",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/Mming-Lab/minecraft-bedrock-mcp-server.git"
+    "url": "git+https://github.com/Mming-Lab/minecraft-bedrock-education-mcp.git"
   },
-  "homepage": "https://github.com/Mming-Lab/minecraft-bedrock-mcp-server#readme",
+  "homepage": "https://github.com/Mming-Lab/minecraft-bedrock-education-mcp#readme",
   "bugs": {
-    "url": "https://github.com/Mming-Lab/minecraft-bedrock-mcp-server/issues"
+    "url": "https://github.com/Mming-Lab/minecraft-bedrock-education-mcp/issues"
   },
   "scripts": {
     "build": "tsc",

@@ -8,7 +8,7 @@ import {
   calculateQuadraticBezier,
 } from '../../../utils/geometry/bezier-calculator';
 import { BUILD_LIMITS } from '../../../utils/constants/build-limits';
-import { BUILD_ERRORS, BUILD_INFO } from '../../../utils/constants/building-messages';
+import { getErrorMessage } from '../../../utils/i18n/building-messages';
 
 /**
  * ベジェ曲線構造物を建築するツール
@@ -141,7 +141,7 @@ export class BuildBezierTool extends BaseTool {
     try {
       // Socket-BE API接続確認
       if (!this.world) {
-        return { success: false, message: BUILD_ERRORS.WORLD_NOT_AVAILABLE };
+        return { success: false, message: getErrorMessage('WORLD_NOT_AVAILABLE') };
       }
 
       const {
@@ -160,16 +160,16 @@ export class BuildBezierTool extends BaseTool {
 
       // actionパラメータをサポート（現在は build のみ）
       if (action !== 'build') {
-        return this.createErrorResponse(BUILD_ERRORS.UNKNOWN_ACTION(action));
+        return this.createErrorResponse(getErrorMessage('UNKNOWN_ACTION', action));
       }
 
       // 制御点の検証
       if (!controlPoints || controlPoints.length === 0) {
-        return this.createErrorResponse(BUILD_ERRORS.INVALID_POINTS);
+        return this.createErrorResponse(getErrorMessage('INVALID_POINTS'));
       }
 
       if (controlPoints.length > 10) {
-        return this.createErrorResponse(BUILD_ERRORS.TOO_MANY_CONTROL_POINTS(10));
+        return this.createErrorResponse(getErrorMessage('TOO_MANY_CONTROL_POINTS', 10));
       }
 
       // 座標の整数化
@@ -217,7 +217,7 @@ export class BuildBezierTool extends BaseTool {
         if (positions.length > BUILD_LIMITS.LINE) {
           return {
             success: false,
-            message: BUILD_ERRORS.TOO_MANY_BLOCKS(BUILD_LIMITS.LINE, positions.length),
+            message: getErrorMessage('TOO_MANY_BLOCKS', BUILD_LIMITS.LINE, positions.length),
           };
         }
 

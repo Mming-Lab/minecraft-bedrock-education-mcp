@@ -34,6 +34,7 @@ import { SequenceTool } from './tools/core/sequence';
 import { MinecraftWikiTool } from './tools/core/minecraft-wiki';
 
 import { BaseTool } from './tools/base/tool';
+import { initializeLocale, SupportedLocale } from './utils/i18n/locale-manager';
 
 /**
  * Minecraft Bedrock Edition用MCPサーバー
@@ -88,9 +89,12 @@ export class MinecraftMCPServer {
      * // /connect localhost:8001/ws
      * ```
      */
-    public start(port: number = 8001): void {
+    public start(port: number = 8001, locale?: SupportedLocale): void {
+        // 言語設定を初期化
+        initializeLocale(locale);
+
         this.socketBE = new SocketBE({ port });
-        
+
         // MCPモードでない場合のみstderrにログ出力
         if (process.stdin.isTTY !== false) {
             console.error(`SocketBE Minecraft WebSocketサーバーを起動中 ポート:${port}`);
@@ -634,13 +638,29 @@ const getPort = (): number => {
             return port;
         }
     }
-    
+
     // デフォルト値
     return 8001;
 };
 
+// 言語設定をコマンドライン引数から取得
+const getLocale = (): SupportedLocale | undefined => {
+    // コマンドライン引数から取得 (--lang=ja または --lang=en)
+    const langArg = process.argv.find(arg => arg.startsWith('--lang='));
+    if (langArg) {
+        const lang = langArg.split('=')[1];
+        if (lang === 'ja' || lang === 'en') {
+            return lang;
+        }
+    }
+
+    // デフォルトは自動検出（undefined）
+    return undefined;
+};
+
 const port = getPort();
-server.start(port);
+const locale = getLocale();
+server.start(port, locale);
 
 process.on('SIGINT', () => {
     process.exit(0);

@@ -4,7 +4,7 @@
  * 座標の検証、正規化、距離計算などの共通処理を提供
  */
 
-import { COORDINATE_VALIDATION } from '../constants/building-messages';
+import { getCoordinateValidationMessage } from '../i18n/building-messages';
 
 /**
  * Minecraft ワールドの座標境界定数
@@ -84,13 +84,13 @@ export function validateYCoordinate(y: number): boolean {
  */
 export function getCoordinateValidationError(x: number, y: number, z: number): string | null {
   if (x < WORLD_BOUNDS.X_MIN || x > WORLD_BOUNDS.X_MAX) {
-    return COORDINATE_VALIDATION.X_OUT_OF_RANGE(x);
+    return getCoordinateValidationMessage('X_OUT_OF_RANGE', x);
   }
   if (y < WORLD_BOUNDS.Y_MIN || y > WORLD_BOUNDS.Y_MAX) {
-    return COORDINATE_VALIDATION.Y_OUT_OF_RANGE(y);
+    return getCoordinateValidationMessage('Y_OUT_OF_RANGE', y);
   }
   if (z < WORLD_BOUNDS.Z_MIN || z > WORLD_BOUNDS.Z_MAX) {
-    return COORDINATE_VALIDATION.Z_OUT_OF_RANGE(z);
+    return getCoordinateValidationMessage('Z_OUT_OF_RANGE', z);
   }
   return null;
 }

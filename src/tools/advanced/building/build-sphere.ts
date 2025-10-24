@@ -137,19 +137,19 @@ export class BuildSphereTool extends BaseTool {
             }
 
             const { action = 'build', centerX, centerY, centerZ, radius, material = 'minecraft:stone', hollow = false, direction = '+y' } = args;
-            
+
             // actionパラメータをサポート（現在は build のみ）
             if (action !== 'build') {
                 return this.createErrorResponse(`Unknown action: ${action}. Only 'build' is supported.`);
             }
-            
+
             // 座標の整数化
             const center = {
                 x: Math.floor(centerX),
                 y: Math.floor(centerY),
                 z: Math.floor(centerZ)
             };
-            
+
             // Y座標の検証
             if (center.y - radius < -64 || center.y + radius > 320) {
                 return {
@@ -157,7 +157,7 @@ export class BuildSphereTool extends BaseTool {
                     message: 'Sphere extends beyond valid Y coordinates (-64 to 320)'
                 };
             }
-            
+
             // 半径の検証
             if (radius < 1 || radius > 20) {
                 return {
@@ -165,17 +165,17 @@ export class BuildSphereTool extends BaseTool {
                     message: 'Radius must be between 1 and 20'
                 };
             }
-            
+
             // ブロックIDの正規化
             let blockId = material;
             if (!blockId.includes(':')) {
                 blockId = `minecraft:${blockId}`;
             }
-            
+
             try {
                 // 球体の座標を計算
                 const positions = calculateSpherePositions(center, radius, hollow);
-                
+
                 // 大きな球体の場合は制限（最適化効果を考慮）
                 if (positions.length > BUILD_LIMITS.SPHERE) {
                     return {
@@ -183,12 +183,12 @@ export class BuildSphereTool extends BaseTool {
                         message: `Too many blocks to place (maximum ${BUILD_LIMITS.SPHERE.toLocaleString()})`
                     };
                 }
-                
+
                 // 方向指定パラメータ
                 const directionalParams: DirectionalParams = {
                     direction: direction as any
                 };
-                
+
                 // 最適化されたビルド実行（回転対応）
                 const result = await executeBuildWithOptimization(
                     this.world,
@@ -205,7 +205,7 @@ export class BuildSphereTool extends BaseTool {
                     },
                     directionalParams
                 );
-                
+
                 return result;
             } catch (buildError) {
                 return {

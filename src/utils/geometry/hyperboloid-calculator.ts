@@ -3,8 +3,8 @@
  * 双曲面構造の座標計算に特化した純粋関数
  */
 
-import { Position } from '../block-optimizer';
-import { calculateCirclePositions } from './cylinder-calculator';
+import { Position } from "../block-optimizer";
+import { calculateCirclePositions } from "./cylinder-calculator";
 
 /**
  * 双曲面座標を計算
@@ -23,23 +23,24 @@ export function calculateHyperboloidPositions(
   hollow: boolean = false
 ): Position[] {
   const positions: Position[] = [];
-  
+
   const steps = height;
   for (let i = 0; i < steps; i++) {
     const y = i - height / 2;
     const normalizedY = y / (height / 2);
-    const currentRadius = radius * Math.sqrt(waist * waist + normalizedY * normalizedY);
-    
+    const currentRadius =
+      radius * Math.sqrt(waist * waist + normalizedY * normalizedY);
+
     const circlePositions = calculateCirclePositions(
       { x: center.x, y: center.y + y, z: center.z },
       currentRadius,
-      'y',
+      "y",
       0,
       hollow
     );
-    
+
     positions.push(...circlePositions);
   }
-  
+
   return positions;
 }

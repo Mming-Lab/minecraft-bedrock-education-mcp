@@ -6,12 +6,15 @@
 /**
  * サポートされる言語
  */
-export type SupportedLocale = 'en' | 'ja';
+export type SupportedLocale = "en" | "ja";
 
 /**
  * メッセージ翻訳マップの型定義
  */
-export type TranslationMap = Record<string, string | ((...args: any[]) => string)>;
+export type TranslationMap = Record<
+  string,
+  string | ((...args: any[]) => string)
+>;
 
 /**
  * 言語別のメッセージコレクション
@@ -25,7 +28,7 @@ export interface LocaleMessages {
  * グローバル言語設定マネージャー
  */
 class LocaleManager {
-  private currentLocale: SupportedLocale = 'en'; // デフォルトは英語
+  private currentLocale: SupportedLocale = "en"; // デフォルトは英語
 
   /**
    * 現在の言語を取得
@@ -48,18 +51,18 @@ class LocaleManager {
   detectLocale(): SupportedLocale {
     // 1. 環境変数 MINECRAFT_MCP_LANG をチェック
     const envLang = process.env.MINECRAFT_MCP_LANG;
-    if (envLang === 'ja' || envLang === 'en') {
+    if (envLang === "ja" || envLang === "en") {
       return envLang;
     }
 
     // 2. システム言語をチェック
-    const systemLang = process.env.LANG || process.env.LANGUAGE || '';
-    if (systemLang.startsWith('ja')) {
-      return 'ja';
+    const systemLang = process.env.LANG || process.env.LANGUAGE || "";
+    if (systemLang.startsWith("ja")) {
+      return "ja";
     }
 
     // 3. デフォルトは英語
-    return 'en';
+    return "en";
   }
 
   /**
@@ -94,20 +97,26 @@ export const localeManager = new LocaleManager();
  * t(messages, 'error', 404); // 'Error 404' または 'エラー 404'
  * ```
  */
-export function t(messages: LocaleMessages, key: string, ...args: any[]): string {
+export function t(
+  messages: LocaleMessages,
+  key: string,
+  ...args: any[]
+): string {
   const locale = localeManager.getLocale();
   const message = messages[locale]?.[key];
 
   if (!message) {
     // フォールバック: キーが見つからない場合は英語を試す
-    const fallbackMessage = messages['en']?.[key];
+    const fallbackMessage = messages["en"]?.[key];
     if (!fallbackMessage) {
       return `[Missing translation: ${key}]`;
     }
-    return typeof fallbackMessage === 'function' ? fallbackMessage(...args) : fallbackMessage;
+    return typeof fallbackMessage === "function"
+      ? fallbackMessage(...args)
+      : fallbackMessage;
   }
 
-  return typeof message === 'function' ? message(...args) : message;
+  return typeof message === "function" ? message(...args) : message;
 }
 
 /**

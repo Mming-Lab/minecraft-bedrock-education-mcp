@@ -3,7 +3,7 @@
  * 螺旋構造の座標計算に特化した純粋関数
  */
 
-import { Position } from '../block-optimizer';
+import { Position } from "../block-optimizer";
 
 /**
  * 螺旋座標を計算（連続性重視）
@@ -19,49 +19,52 @@ export function calculateHelixPositions(
   height: number,
   radius: number,
   turns: number,
-  axis: 'x' | 'y' | 'z' = 'y'
+  axis: "x" | "y" | "z" = "y"
 ): Position[] {
   const positionSet = new Set<string>();
   const positions: Position[] = [];
-  
+
   // 螺旋の弧長を基準にした密度計算
   const circumference = 2 * Math.PI * radius;
   const totalArcLength = circumference * turns;
-  const helixLength = Math.sqrt(totalArcLength * totalArcLength + height * height);
+  const helixLength = Math.sqrt(
+    totalArcLength * totalArcLength + height * height
+  );
   const steps = Math.max(height * 2, Math.round(helixLength)); // 連続性を保つ密度
-  
+
   for (let i = 0; i <= steps; i++) {
     const progress = i / steps;
-    const angle = (turns * 2 * Math.PI) * progress;
-    
+    const angle = turns * 2 * Math.PI * progress;
+
     const dx = Math.cos(angle) * radius;
     const dz = Math.sin(angle) * radius;
-    
+
     let pos: Position;
-    
-    if (axis === 'y') {
-      const y = start.y + (height * progress);
+
+    if (axis === "y") {
+      const y = start.y + height * progress;
       pos = {
         x: Math.round(start.x + dx),
         y: Math.round(y),
-        z: Math.round(start.z + dz)
+        z: Math.round(start.z + dz),
       };
-    } else if (axis === 'x') {
-      const x = start.x + (height * progress);
+    } else if (axis === "x") {
+      const x = start.x + height * progress;
       pos = {
         x: Math.round(x),
         y: Math.round(start.y + dx),
-        z: Math.round(start.z + dz)
+        z: Math.round(start.z + dz),
       };
-    } else { // axis === 'z'
-      const z = start.z + (height * progress);
+    } else {
+      // axis === 'z'
+      const z = start.z + height * progress;
       pos = {
         x: Math.round(start.x + dx),
         y: Math.round(start.y + dz),
-        z: Math.round(z)
+        z: Math.round(z),
       };
     }
-    
+
     // 重複座標を除去（但し連続性は保持）
     const posKey = `${pos.x},${pos.y},${pos.z}`;
     if (!positionSet.has(posKey)) {
@@ -69,6 +72,6 @@ export function calculateHelixPositions(
       positions.push(pos);
     }
   }
-  
+
   return positions;
 }

@@ -4,7 +4,7 @@
  * 座標の検証、正規化、距離計算などの共通処理を提供
  */
 
-import { getCoordinateValidationMessage } from '../i18n/building-messages';
+import { getCoordinateValidationMessage } from "../i18n/building-messages";
 
 /**
  * Minecraft ワールドの座標境界定数
@@ -32,7 +32,11 @@ export const MATH_CONSTANTS = {
 /**
  * 座標を有効範囲内に正規化
  */
-export function normalizeCoordinate(coord: number, min: number, max: number): number {
+export function normalizeCoordinate(
+  coord: number,
+  min: number,
+  max: number
+): number {
   const normalized = Math.round(coord);
   return Math.max(min, Math.min(max, normalized));
 }
@@ -82,15 +86,19 @@ export function validateYCoordinate(y: number): boolean {
 /**
  * 座標検証の詳細なエラーメッセージを生成
  */
-export function getCoordinateValidationError(x: number, y: number, z: number): string | null {
+export function getCoordinateValidationError(
+  x: number,
+  y: number,
+  z: number
+): string | null {
   if (x < WORLD_BOUNDS.X_MIN || x > WORLD_BOUNDS.X_MAX) {
-    return getCoordinateValidationMessage('X_OUT_OF_RANGE', x);
+    return getCoordinateValidationMessage("X_OUT_OF_RANGE", x);
   }
   if (y < WORLD_BOUNDS.Y_MIN || y > WORLD_BOUNDS.Y_MAX) {
-    return getCoordinateValidationMessage('Y_OUT_OF_RANGE', y);
+    return getCoordinateValidationMessage("Y_OUT_OF_RANGE", y);
   }
   if (z < WORLD_BOUNDS.Z_MIN || z > WORLD_BOUNDS.Z_MAX) {
-    return getCoordinateValidationMessage('Z_OUT_OF_RANGE', z);
+    return getCoordinateValidationMessage("Z_OUT_OF_RANGE", z);
   }
   return null;
 }
@@ -115,7 +123,10 @@ export function calculateDistance(
 /**
  * 2点間の距離を計算（Position型）
  */
-export function distanceBetween(p1: { x: number; y: number; z: number }, p2: { x: number; y: number; z: number }): number {
+export function distanceBetween(
+  p1: { x: number; y: number; z: number },
+  p2: { x: number; y: number; z: number }
+): number {
   return calculateDistance(p1.x, p1.y, p1.z, p2.x, p2.y, p2.z);
 }
 
@@ -146,7 +157,11 @@ export function calculateNormalizedDistance(
  * @param radius 半径
  * @param hollow 中空フラグ
  */
-export function shouldPlaceBlock(distance: number, radius: number, hollow: boolean): boolean {
+export function shouldPlaceBlock(
+  distance: number,
+  radius: number,
+  hollow: boolean
+): boolean {
   if (hollow) {
     // 中空の場合は外側1層のみ
     return distance <= radius && distance >= Math.max(0, radius - 1);
@@ -164,7 +179,11 @@ export const HOLLOW_THRESHOLD = 0.8;
 /**
  * 座標を整数に丸める
  */
-export function roundPosition(x: number, y: number, z: number): { x: number; y: number; z: number } {
+export function roundPosition(
+  x: number,
+  y: number,
+  z: number
+): { x: number; y: number; z: number } {
   return {
     x: Math.floor(x),
     y: Math.floor(y),
@@ -176,7 +195,9 @@ export function roundPosition(x: number, y: number, z: number): { x: number; y: 
  * 座標配列の重複を除去
  * MakeCode互換の方法でユニーク化
  */
-export function removeDuplicatePositions(positions: { x: number; y: number; z: number }[]): { x: number; y: number; z: number }[] {
+export function removeDuplicatePositions(
+  positions: { x: number; y: number; z: number }[]
+): { x: number; y: number; z: number }[] {
   const seen = new Set<string>();
   const unique: { x: number; y: number; z: number }[] = [];
 
@@ -194,7 +215,9 @@ export function removeDuplicatePositions(positions: { x: number; y: number; z: n
 /**
  * 座標配列の境界ボックスを計算
  */
-export function calculateBoundingBox(positions: { x: number; y: number; z: number }[]): {
+export function calculateBoundingBox(
+  positions: { x: number; y: number; z: number }[]
+): {
   minX: number;
   maxX: number;
   minY: number;

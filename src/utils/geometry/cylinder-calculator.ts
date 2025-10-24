@@ -3,7 +3,7 @@
  * 円柱構造の座標計算に特化した純粋関数
  */
 
-import { Position } from '../block-optimizer';
+import { Position } from "../block-optimizer";
 
 /**
  * 円柱座標を計算
@@ -18,16 +18,22 @@ export function calculateCylinderPositions(
   center: Position,
   radius: number,
   height: number,
-  axis: 'x' | 'y' | 'z' = 'y',
+  axis: "x" | "y" | "z" = "y",
   hollow: boolean = false
 ): Position[] {
   const positions: Position[] = [];
-  
+
   for (let i = 0; i < height; i++) {
-    const levelPositions = calculateCirclePositions(center, radius, axis, i, hollow);
+    const levelPositions = calculateCirclePositions(
+      center,
+      radius,
+      axis,
+      i,
+      hollow
+    );
     positions.push(...levelPositions);
   }
-  
+
   return positions;
 }
 
@@ -43,36 +49,48 @@ export function calculateCylinderPositions(
 export function calculateCirclePositions(
   center: Position,
   radius: number,
-  axis: 'x' | 'y' | 'z' = 'y',
+  axis: "x" | "y" | "z" = "y",
   offset: number = 0,
   hollow: boolean = false
 ): Position[] {
   const positions: Position[] = [];
-  
+
   const baseRadius = Math.floor(radius);
-  
+
   for (let dx = -baseRadius; dx <= baseRadius; dx++) {
     for (let dz = -baseRadius; dz <= baseRadius; dz++) {
       const distance = Math.sqrt(dx * dx + dz * dz);
-      
+
       let shouldPlace = false;
       if (hollow) {
         shouldPlace = distance <= radius && distance >= radius - 1;
       } else {
         shouldPlace = distance <= radius;
       }
-      
+
       if (shouldPlace) {
-        if (axis === 'y') {
-          positions.push({x: center.x + dx, y: center.y + offset, z: center.z + dz});
-        } else if (axis === 'x') {
-          positions.push({x: center.x + offset, y: center.y + dx, z: center.z + dz});
-        } else if (axis === 'z') {
-          positions.push({x: center.x + dx, y: center.y + dz, z: center.z + offset});
+        if (axis === "y") {
+          positions.push({
+            x: center.x + dx,
+            y: center.y + offset,
+            z: center.z + dz,
+          });
+        } else if (axis === "x") {
+          positions.push({
+            x: center.x + offset,
+            y: center.y + dx,
+            z: center.z + dz,
+          });
+        } else if (axis === "z") {
+          positions.push({
+            x: center.x + dx,
+            y: center.y + dz,
+            z: center.z + offset,
+          });
         }
       }
     }
   }
-  
+
   return positions;
 }

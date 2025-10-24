@@ -3,7 +3,11 @@
  * makecode-minecraft-geometry-ext の可変制御点ベジェ曲線を参考に実装
  */
 
-import { bernsteinBasis, calculateDistance, removeDuplicatePositions } from './coordinate-utils';
+import {
+  bernsteinBasis,
+  calculateDistance,
+  removeDuplicatePositions,
+} from "./coordinate-utils";
 
 export interface Position {
   x: number;
@@ -94,7 +98,11 @@ export function calculateBezierPositions(
 /**
  * 直線経路を計算
  */
-function calculateLinearPath(start: Position, end: Position, segments: number): Position[] {
+function calculateLinearPath(
+  start: Position,
+  end: Position,
+  segments: number
+): Position[] {
   const positions: Position[] = [];
 
   for (let i = 0; i <= segments; i++) {
@@ -178,7 +186,11 @@ export function calculateAdaptiveSegments(
   controlPoints: Position[],
   blocksPerUnit: number = 1
 ): number {
-  const arcLength = estimateBezierArcLength(startPoint, endPoint, controlPoints);
+  const arcLength = estimateBezierArcLength(
+    startPoint,
+    endPoint,
+    controlPoints
+  );
   const segments = Math.ceil(arcLength * blocksPerUnit);
 
   // 最小50、最大1000の範囲で制限

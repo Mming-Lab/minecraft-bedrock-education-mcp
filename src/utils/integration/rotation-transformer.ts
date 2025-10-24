@@ -3,18 +3,18 @@
  * 複数回転とプリセット方向指定を統合処理
  */
 
-import { Position } from '../block-optimizer';
-import { rotatePointsArray } from '../math/rotation-algorithms';
-import { calculateCentroid } from '../math/vector-utils';
+import { Position } from "../block-optimizer";
+import { rotatePointsArray } from "../math/rotation-algorithms";
+import { calculateCentroid } from "../math/vector-utils";
 
 export interface RotationParams {
-  axis: 'x' | 'y' | 'z';
+  axis: "x" | "y" | "z";
   angle: number; // 度数
   origin: Position; // 回転中心
 }
 
 export interface DirectionalParams {
-  direction?: '+x' | '+y' | '+z' | '-x' | '-y' | '-z' | 'custom';
+  direction?: "+x" | "+y" | "+z" | "-x" | "-y" | "-z" | "custom";
   rotations?: RotationParams[]; // 複数回転（オイラー角対応）
 }
 
@@ -29,11 +29,16 @@ export function applyMultipleRotations(
   rotations: RotationParams[]
 ): Position[] {
   let result = [...positions];
-  
+
   for (const rotation of rotations) {
-    result = rotatePointsArray(result, rotation.origin, rotation.axis, rotation.angle);
+    result = rotatePointsArray(
+      result,
+      rotation.origin,
+      rotation.axis,
+      rotation.angle
+    );
   }
-  
+
   return result;
 }
 
@@ -48,14 +53,14 @@ export function getRotationsFromDirection(
   origin: Position
 ): RotationParams[] {
   const directions: Record<string, RotationParams[]> = {
-    '+x': [{ axis: 'z', angle: -90, origin }], // Y軸構造をX軸方向に
-    '-x': [{ axis: 'z', angle: 90, origin }],
-    '+y': [], // デフォルト（回転なし）
-    '-y': [{ axis: 'z', angle: 180, origin }],
-    '+z': [{ axis: 'x', angle: 90, origin }], // Y軸構造をZ軸方向に
-    '-z': [{ axis: 'x', angle: -90, origin }]
+    "+x": [{ axis: "z", angle: -90, origin }], // Y軸構造をX軸方向に
+    "-x": [{ axis: "z", angle: 90, origin }],
+    "+y": [], // デフォルト（回転なし）
+    "-y": [{ axis: "z", angle: 180, origin }],
+    "+z": [{ axis: "x", angle: 90, origin }], // Y軸構造をZ軸方向に
+    "-z": [{ axis: "x", angle: -90, origin }],
   };
-  
+
   return directions[direction] || [];
 }
 
@@ -68,23 +73,23 @@ export function getRotationsFromDirection(
 export function applyDirectionalTransform(
   positions: Position[],
   params: DirectionalParams
-): { 
-  positions: Position[]; 
-  transformInfo: string; 
+): {
+  positions: Position[];
+  transformInfo: string;
 } {
   if (positions.length === 0) {
-    return { positions, transformInfo: '' };
+    return { positions, transformInfo: "" };
   }
-  
+
   // 回転中心を計算（重心）
   const origin = calculateCentroid(positions);
-  
+
   let rotations: RotationParams[] = [];
-  let transformInfo = '';
-  
-  if (params.direction && params.direction !== '+y') {
+  let transformInfo = "";
+
+  if (params.direction && params.direction !== "+y") {
     // プリセット方向指定
-    if (params.direction === 'custom' && params.rotations) {
+    if (params.direction === "custom" && params.rotations) {
       rotations = params.rotations;
       transformInfo = `custom rotations (${rotations.length} steps)`;
     } else {
@@ -96,16 +101,16 @@ export function applyDirectionalTransform(
     rotations = params.rotations;
     transformInfo = `custom rotations (${rotations.length} steps)`;
   }
-  
+
   if (rotations.length === 0) {
-    return { positions, transformInfo: '' };
+    return { positions, transformInfo: "" };
   }
-  
+
   const transformedPositions = applyMultipleRotations(positions, rotations);
-  
-  return { 
-    positions: transformedPositions, 
-    transformInfo: transformInfo ? ` (${transformInfo})` : ''
+
+  return {
+    positions: transformedPositions,
+    transformInfo: transformInfo ? ` (${transformInfo})` : "",
   };
 }
 
@@ -114,40 +119,34 @@ export function applyDirectionalTransform(
  */
 export const PRESET_ORIENTATIONS = {
   // 基本軸方向
-  POSITIVE_X: [{ axis: 'z' as const, angle: -90 }],
-  NEGATIVE_X: [{ axis: 'z' as const, angle: 90 }],
+  POSITIVE_X: [{ axis: "z" as const, angle: -90 }],
+  NEGATIVE_X: [{ axis: "z" as const, angle: 90 }],
   POSITIVE_Y: [], // デフォルト
-  NEGATIVE_Y: [{ axis: 'z' as const, angle: 180 }],
-  POSITIVE_Z: [{ axis: 'x' as const, angle: 90 }],
-  NEGATIVE_Z: [{ axis: 'x' as const, angle: -90 }],
-  
+  NEGATIVE_Y: [{ axis: "z" as const, angle: 180 }],
+  POSITIVE_Z: [{ axis: "x" as const, angle: 90 }],
+  NEGATIVE_Z: [{ axis: "x" as const, angle: -90 }],
+
   // 斜め方向（45度傾斜）
-  DIAGONAL_XY_45: [
-    { axis: 'z' as const, angle: 45 }
-  ],
-  DIAGONAL_XZ_45: [
-    { axis: 'y' as const, angle: 45 }
-  ],
-  DIAGONAL_YZ_45: [
-    { axis: 'x' as const, angle: 45 }
-  ],
-  
+  DIAGONAL_XY_45: [{ axis: "z" as const, angle: 45 }],
+  DIAGONAL_XZ_45: [{ axis: "y" as const, angle: 45 }],
+  DIAGONAL_YZ_45: [{ axis: "x" as const, angle: 45 }],
+
   // 複雑な姿勢（3軸回転）
   TILTED_TOWER: [
-    { axis: 'x' as const, angle: 15 }, // 前後に傾ける
-    { axis: 'y' as const, angle: 30 }, // 左右に向ける
-    { axis: 'z' as const, angle: 10 }  // ひねる
+    { axis: "x" as const, angle: 15 }, // 前後に傾ける
+    { axis: "y" as const, angle: 30 }, // 左右に向ける
+    { axis: "z" as const, angle: 10 }, // ひねる
   ],
   DIAGONAL_SPIRAL: [
-    { axis: 'x' as const, angle: 30 },
-    { axis: 'y' as const, angle: 45 },
-    { axis: 'z' as const, angle: 15 }
+    { axis: "x" as const, angle: 30 },
+    { axis: "y" as const, angle: 45 },
+    { axis: "z" as const, angle: 15 },
   ],
   EXTREME_ANGLE: [
-    { axis: 'x' as const, angle: 60 },
-    { axis: 'y' as const, angle: 45 },
-    { axis: 'z' as const, angle: 30 }
-  ]
+    { axis: "x" as const, angle: 60 },
+    { axis: "y" as const, angle: 45 },
+    { axis: "z" as const, angle: 30 },
+  ],
 } as const;
 
 /**
@@ -163,21 +162,21 @@ export function applyPresetOrientation(
   origin?: Position
 ): { positions: Position[]; transformInfo: string } {
   if (positions.length === 0) {
-    return { positions, transformInfo: '' };
+    return { positions, transformInfo: "" };
   }
-  
+
   const rotationOrigin = origin || calculateCentroid(positions);
   const rotationTemplates = PRESET_ORIENTATIONS[presetName];
-  
-  const rotations: RotationParams[] = rotationTemplates.map(template => ({
+
+  const rotations: RotationParams[] = rotationTemplates.map((template) => ({
     ...template,
-    origin: rotationOrigin
+    origin: rotationOrigin,
   }));
-  
+
   const transformedPositions = applyMultipleRotations(positions, rotations);
-  
+
   return {
     positions: transformedPositions,
-    transformInfo: ` (preset: ${presetName}, ${rotations.length} rotations)`
+    transformInfo: ` (preset: ${presetName}, ${rotations.length} rotations)`,
   };
 }

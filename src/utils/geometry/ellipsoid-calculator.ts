@@ -3,7 +3,7 @@
  * 楕円体構造の座標計算に特化した純粋関数
  */
 
-import { Position } from '../block-optimizer';
+import { Position } from "../block-optimizer";
 
 /**
  * 楕円体座標を計算
@@ -22,32 +22,32 @@ export function calculateEllipsoidPositions(
   hollow: boolean = false
 ): Position[] {
   const positions: Position[] = [];
-  
+
   const maxRadius = Math.max(radiusX, radiusY, radiusZ);
-  
+
   for (let x = center.x - maxRadius; x <= center.x + maxRadius; x++) {
     for (let y = center.y - maxRadius; y <= center.y + maxRadius; y++) {
       for (let z = center.z - maxRadius; z <= center.z + maxRadius; z++) {
         const normalizedDistance = Math.sqrt(
           Math.pow((x - center.x) / radiusX, 2) +
-          Math.pow((y - center.y) / radiusY, 2) +
-          Math.pow((z - center.z) / radiusZ, 2)
+            Math.pow((y - center.y) / radiusY, 2) +
+            Math.pow((z - center.z) / radiusZ, 2)
         );
-        
+
         let shouldPlace = false;
-        
+
         if (hollow) {
           shouldPlace = normalizedDistance <= 1 && normalizedDistance >= 0.8;
         } else {
           shouldPlace = normalizedDistance <= 1;
         }
-        
+
         if (shouldPlace) {
-          positions.push({x, y, z});
+          positions.push({ x, y, z });
         }
       }
     }
   }
-  
+
   return positions;
 }

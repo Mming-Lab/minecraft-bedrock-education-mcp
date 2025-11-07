@@ -1,13 +1,12 @@
 import { Server as SocketBE, ServerEvent, World, Agent } from "socket-be";
 import { v4 as uuidv4 } from "uuid";
+import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
+import { z } from "zod";
 import {
-  MCPRequest,
-  MCPResponse,
-  Tool,
   ConnectedPlayer,
   ToolCallResult,
 } from "./types";
-// レベル1: 基本操作ツール（Socket-BE移行済み）
 
 // Advanced Building ツール
 import { BuildCubeTool } from "./tools/advanced/building/build-cube";
@@ -70,6 +69,22 @@ export class MinecraftMCPServer {
   private tools: BaseTool[] = [];
   private currentWorld: World | null = null;
   private currentAgent: Agent | null = null;
+  private mcpServer: McpServer;
+
+  constructor() {
+    // MCP公式SDKのサーバーを初期化
+    this.mcpServer = new McpServer(
+      {
+        name: "minecraft-bedrock-education-mcp",
+        version: "1.0.0",
+      },
+      {
+        capabilities: {
+          tools: {},
+        },
+      }
+    );
+  }
 
   /**
    * MCPサーバーを起動します
@@ -89,10 +104,24 @@ export class MinecraftMCPServer {
    * // /connect localhost:8001/ws
    * ```
    */
-  public start(port: number = 8001, locale?: SupportedLocale): void {
+  public async start(port: number = 8001, locale?: SupportedLocale): Promise<void> {
     // 言語設定を初期化
     initializeLocale(locale);
 
+    // ツールの初期化
+    this.initializeTools();
+
+    // 基本ツールの登録
+    this.registerBasicTools();
+
+    // モジュラーツールの登録
+    this.registerModularTools();
+
+    // MCP Stdio Transportに接続
+    const transport = new StdioServerTransport();
+    await this.mcpServer.connect(transport);
+
+    // Socket-BE Minecraftサーバーを起動
     this.socketBE = new SocketBE({ port });
 
     // MCPモードでない場合のみstderrにログ出力
@@ -230,12 +259,6 @@ export class MinecraftMCPServer {
         tool.setSocketBEInstances(null, null);
       });
     });
-
-    // MCP stdin処理
-    this.setupMCPInterface();
-
-    // ツールの初期化
-    this.initializeTools();
   }
 
   /**
@@ -296,6 +319,187 @@ export class MinecraftMCPServer {
       });
       sequenceTool.setToolRegistry(toolRegistry);
     }
+  }
+
+  /**
+   * MCP SDKに基本ツールを登録
+   */
+  private registerBasicTools(): void {
+    // send_message ツール
+    this.mcpServer.registerTool(
+      "send_message",
+      {
+        title: "Send Message",
+        description:
+          "Send a chat message to the connected Minecraft player. ALWAYS provide a message parameter. Use this to communicate with the player about build progress or instructions.",
+        inputSchema: {
+          message: z
+            .string()
+            .describe(
+              "The text message to send to the player (REQUIRED - never call this without a message)"
+            ),
+        },
+      },
+      async ({ message }: { message: string }) => {
+        const result = await this.sendMessage(message || "Hello from MCP server!");
+        return {
+          content: [
+            {
+              type: "text",
+              text: result.success
+                ? result.message || "Message sent successfully"
+                : `❌ ${result.message || "Failed to send message"}`,
+            },
+          ],
+        };
+      }
+    );
+
+    // execute_command ツール
+    this.mcpServer.registerTool(
+      "execute_command",
+      {
+        title: "Execute Command",
+        description: "Execute a Minecraft command",
+        inputSchema: {
+          command: z.string().describe("The Minecraft command to execute"),
+        },
+      },
+      async ({ command }: { command: string }) => {
+        const result = await this.executeCommand(command);
+        return {
+          content: [
+            {
+              type: "text",
+              text: result.success
+                ? `${result.message || "Command executed successfully"}\n\nData: ${JSON.stringify(result.data, null, 2)}`
+                : `❌ ${result.message || "Command execution failed"}`,
+            },
+          ],
+        };
+      }
+    );
+  }
+
+  /**
+   * MCP SDKにモジュラーツールを登録
+   */
+  private registerModularTools(): void {
+    this.tools.forEach((tool) => {
+      // inputSchemaをZod形式に変換
+      const zodSchema: Record<string, z.ZodTypeAny> = {};
+      const properties = tool.inputSchema.properties;
+
+      for (const [key, prop] of Object.entries(properties)) {
+        let zodType: z.ZodTypeAny;
+
+        // プロパティの型に応じてZodスキーマを構築
+        if (prop.type === "string") {
+          zodType = z.string();
+          if (prop.enum) {
+            zodType = z.enum(prop.enum as [string, ...string[]]);
+          }
+        } else if (prop.type === "number") {
+          let numType = z.number();
+          if (prop.minimum !== undefined) {
+            numType = numType.min(prop.minimum);
+          }
+          if (prop.maximum !== undefined) {
+            numType = numType.max(prop.maximum);
+          }
+          zodType = numType;
+        } else if (prop.type === "boolean") {
+          zodType = z.boolean();
+        } else if (prop.type === "array") {
+          if (prop.items) {
+            let itemType: z.ZodTypeAny;
+            if (prop.items.type === "string") {
+              itemType = z.string();
+            } else if (prop.items.type === "number") {
+              itemType = z.number();
+            } else if (prop.items.type === "object" && prop.items.properties) {
+              // オブジェクト配列の場合
+              const itemZodSchema: Record<string, z.ZodTypeAny> = {};
+              for (const [itemKey, itemProp] of Object.entries(prop.items.properties)) {
+                if (itemProp.type === "string") {
+                  itemZodSchema[itemKey] = z.string();
+                } else if (itemProp.type === "number") {
+                  itemZodSchema[itemKey] = z.number();
+                }
+              }
+              itemType = z.object(itemZodSchema);
+            } else {
+              itemType = z.any();
+            }
+            zodType = z.array(itemType);
+          } else {
+            zodType = z.array(z.any());
+          }
+        } else {
+          zodType = z.any();
+        }
+
+        // デフォルト値の設定
+        if (prop.default !== undefined) {
+          zodType = zodType.default(prop.default);
+        }
+
+        // 説明の追加
+        if (prop.description) {
+          zodType = zodType.describe(prop.description);
+        }
+
+        // 必須フィールドでない場合はoptional
+        if (!tool.inputSchema.required?.includes(key)) {
+          zodType = zodType.optional();
+        }
+
+        zodSchema[key] = zodType;
+      }
+
+      // ツールを登録
+      this.mcpServer.registerTool(
+        tool.name,
+        {
+          title: tool.name,
+          description: tool.description,
+          inputSchema: zodSchema,
+        },
+        async (args: any) => {
+          try {
+            const result = await tool.execute(args);
+
+            return {
+              content: [
+                {
+                  type: "text",
+                  text: result.success
+                    ? result.data
+                      ? `${result.message || `Tool ${tool.name} executed successfully`}\n\nData: ${JSON.stringify(result.data, null, 2)}`
+                      : result.message || `Tool ${tool.name} executed successfully`
+                    : `❌ ${result.message || "Tool execution failed"}${result.data ? `\n\nDetails:\n${JSON.stringify(result.data, null, 2)}` : ""}`,
+                },
+              ],
+            };
+          } catch (error) {
+            const errorMsg =
+              error instanceof Error ? error.message : String(error);
+            const errorStack = error instanceof Error ? error.stack : undefined;
+
+            const exceptionMessage = `Tool execution failed with exception: ${errorMsg}${errorStack ? `\n\nStack trace:\n${errorStack}` : ""}`;
+
+            return {
+              content: [
+                {
+                  type: "text",
+                  text: `❌ ${exceptionMessage}`,
+                },
+              ],
+            };
+          }
+        }
+      );
+    });
   }
 
   private lastCommandResponse: any = null;
@@ -381,306 +585,6 @@ export class MinecraftMCPServer {
    */
   public getLastCommandResponse(): any {
     return this.lastCommandResponse;
-  }
-
-  /**
-   * MCPインターフェースを設定します
-   * Claude Desktop等のMCPクライアントとの通信を初期化
-   */
-  private setupMCPInterface(): void {
-    // Claude Desktop用にMCPインターフェースを常に設定
-    process.stdin.setEncoding("utf8");
-    process.stdin.on("data", async (data: string) => {
-      const line = data.toString().trim();
-      if (!line) return;
-
-      try {
-        const request: MCPRequest = JSON.parse(line);
-        const response = await this.handleMCPRequest(request);
-
-        // 通知以外の全リクエストに対して即座にレスポンスを送信
-        if (response !== null) {
-          process.stdout.write(JSON.stringify(response) + "\n");
-        }
-      } catch (error) {
-        // 無効なJSONに対するエラーレスポンスを送信
-        if (line.includes('"id"')) {
-          try {
-            const partialRequest = JSON.parse(line);
-            if (partialRequest.id !== undefined) {
-              const errorResponse: MCPResponse = {
-                jsonrpc: "2.0",
-                id: partialRequest.id,
-                error: {
-                  code: -32700,
-                  message: "Parse error",
-                },
-              };
-              process.stdout.write(JSON.stringify(errorResponse) + "\n");
-            }
-          } catch (e) {
-            // IDを抽出できない場合は無視
-          }
-        }
-      }
-    });
-  }
-
-  /**
-   * MCPリクエストを処理します
-   *
-   * JSON-RPC 2.0形式のリクエストを解析し、適切なレスポンスを生成します。
-   *
-   * @param request - MCPリクエスト
-   * @returns MCPレスポンス（通知の場合はnull）
-   * @internal
-   */
-  private async handleMCPRequest(
-    request: MCPRequest
-  ): Promise<MCPResponse | null> {
-    switch (request.method) {
-      case "notifications/initialized":
-      case "notifications/cancelled":
-        // 通知はレスポンスが不要
-        return null;
-
-      case "initialize":
-        return {
-          jsonrpc: "2.0",
-          id: request.id,
-          result: {
-            protocolVersion: "2024-11-05",
-            capabilities: { tools: {} },
-            serverInfo: {
-              name: "mcbk-mcp-typescript",
-              version: "1.0.0",
-            },
-          },
-        };
-
-      case "tools/list":
-        return {
-          jsonrpc: "2.0",
-          id: request.id,
-          result: {
-            tools: this.getTools(),
-          },
-        };
-
-      case "tools/call":
-        return await this.handleToolCall(request);
-
-      case "resources/list":
-        return {
-          jsonrpc: "2.0",
-          id: request.id,
-          result: {
-            resources: [],
-          },
-        };
-
-      case "prompts/list":
-        return {
-          jsonrpc: "2.0",
-          id: request.id,
-          result: {
-            prompts: [],
-          },
-        };
-
-      default:
-        return {
-          jsonrpc: "2.0",
-          id: request.id,
-          error: { code: -32601, message: "Method not found" },
-        };
-    }
-  }
-
-  /**
-   * 利用可能なツール一覧を取得します
-   * MCPクライアントにツール情報を提供
-   * @returns ツール定義の配列
-   */
-  private getTools(): Tool[] {
-    const basicTools: Tool[] = [
-      {
-        name: "send_message",
-        description:
-          "Send a chat message to the connected Minecraft player. ALWAYS provide a message parameter. Use this to communicate with the player about build progress or instructions.",
-        inputSchema: {
-          type: "object",
-          properties: {
-            message: {
-              type: "string",
-              description:
-                "The text message to send to the player (REQUIRED - never call this without a message)",
-            },
-          },
-          required: ["message"],
-        },
-      },
-      {
-        name: "execute_command",
-        description: "Execute a Minecraft command",
-        inputSchema: {
-          type: "object",
-          properties: {
-            command: {
-              type: "string",
-              description: "The Minecraft command to execute",
-            },
-          },
-          required: ["command"],
-        },
-      },
-    ];
-
-    // モジュラーツールを追加
-    const modularTools: Tool[] = this.tools.map((tool) => ({
-      name: tool.name,
-      description: tool.description,
-      inputSchema: tool.inputSchema,
-    }));
-
-    return [...basicTools, ...modularTools];
-  }
-
-  /**
-   * ツール実行リクエストを処理します
-   * MCPクライアントからのツール呼び出しを受け取り、適切なツールに委譲
-   * @param request - MCPツール実行リクエスト
-   * @returns ツール実行結果のMCPレスポンス
-   */
-  private async handleToolCall(request: MCPRequest): Promise<MCPResponse> {
-    try {
-      const toolName = request.params?.name;
-      const args = request.params?.arguments || request.params?.args || {};
-
-      if (!toolName) {
-        return {
-          jsonrpc: "2.0",
-          id: request.id,
-          error: { code: -32602, message: "Missing tool name" },
-        };
-      }
-
-      let result: ToolCallResult;
-
-      // 基本ツールの処理
-      if (toolName === "send_message") {
-        // メッセージパラメータの処理
-        const message = args.message || args.text || "Hello from MCP server!";
-
-        if (!message || message.trim() === "") {
-          return {
-            jsonrpc: "2.0",
-            id: request.id,
-            error: {
-              code: -32602,
-              message: "Message parameter is required and cannot be empty",
-            },
-          };
-        }
-        result = await this.sendMessage(message);
-      } else if (toolName === "execute_command") {
-        result = await this.executeCommand(args.command);
-      } else {
-        // モジュラーツールの処理
-        const tool = this.tools.find((t) => t.name === toolName);
-        if (!tool) {
-          return {
-            jsonrpc: "2.0",
-            id: request.id,
-            error: { code: -32603, message: `Unknown tool: ${toolName}` },
-          };
-        }
-
-        try {
-          result = await tool.execute(args);
-        } catch (error) {
-          // ツール実行中の例外をキャッチして詳細を返す
-          const errorMsg =
-            error instanceof Error ? error.message : String(error);
-          const errorStack = error instanceof Error ? error.stack : undefined;
-
-          console.error(
-            `[server] Tool ${toolName} threw exception: ${errorMsg}`
-          );
-          if (errorStack) {
-            console.error(`[server] Stack trace:\n${errorStack}`);
-          }
-
-          const exceptionMessage = `Tool execution failed with exception: ${errorMsg}${errorStack ? `\n\nStack trace:\n${errorStack}` : ""}`;
-
-          // Claude Desktopはerror.messageフィールドを無視し固定の"Tool execution failed"を表示するため、
-          // エラーメッセージをresult.contentとして返す（回避策）
-          // MCP仕様では非準拠だが、ユーザーに詳細なエラー情報を提供するために必要
-          return {
-            jsonrpc: "2.0",
-            id: request.id,
-            result: {
-              content: [
-                {
-                  type: "text",
-                  text: `❌ ${exceptionMessage}`
-                }
-              ]
-            }
-          };
-        }
-      }
-
-      if (!result.success) {
-        // ツール実行失敗時により詳細なエラーメッセージを提供
-        const errorMessage = result.message || "Tool execution failed";
-        const detailedMessage = result.data
-          ? `${errorMessage}\n\nDetails:\n${JSON.stringify(result.data, null, 2)}`
-          : errorMessage;
-
-        console.error(`[server] Tool ${toolName} failed: ${detailedMessage}`);
-
-        // Claude Desktopはerror.messageフィールドを無視し固定の"Tool execution failed"を表示するため、
-        // エラーメッセージをresult.contentとして返す（回避策）
-        // MCP仕様では非準拠だが、ユーザーに詳細なエラー情報を提供するために必要
-        return {
-          jsonrpc: "2.0",
-          id: request.id,
-          result: {
-            content: [
-              {
-                type: "text",
-                text: `❌ ${detailedMessage}`
-              }
-            ]
-          }
-        };
-      }
-
-      return {
-        jsonrpc: "2.0",
-        id: request.id,
-        result: {
-          content: [
-            {
-              type: "text",
-              text: result.data
-                ? `${result.message || `Tool ${toolName} executed successfully`}\n\nData: ${JSON.stringify(result.data, null, 2)}`
-                : result.message || `Tool ${toolName} executed successfully`,
-            },
-          ],
-        },
-      };
-    } catch (error) {
-      return {
-        jsonrpc: "2.0",
-        id: request.id,
-        error: {
-          code: -32603,
-          message: `Tool call handler error: ${error instanceof Error ? error.message : String(error)}`,
-        },
-      };
-    }
   }
 }
 

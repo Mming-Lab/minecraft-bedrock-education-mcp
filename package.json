@@ -27,6 +27,7 @@
     "test:all": "npm run test:websocket && npm run test:responses && npm test"
   },
   "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.21.1",
     "socket-be": "^2.1.0",
     "uuid": "^9.0.1",
     "ws": "^8.18.0"

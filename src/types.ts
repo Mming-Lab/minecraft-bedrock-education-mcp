@@ -1,46 +1,7 @@
 import { WebSocket } from "ws";
 
-// MCPプロトコル型定義
-
-/**
- * MCP（Model Context Protocol）リクエストメッセージの型定義
- * JSON-RPC 2.0仕様に準拠したリクエストフォーマット
- *
- * @interface MCPRequest
- */
-export interface MCPRequest {
-  jsonrpc: string;
-  id: string | number;
-  method: string;
-  params?: any;
-}
-
-/**
- * MCP（Model Context Protocol）レスポンスメッセージの型定義
- * JSON-RPC 2.0仕様に準拠したレスポンスフォーマット
- *
- * @interface MCPResponse
- */
-export interface MCPResponse {
-  jsonrpc: string;
-  id: string | number;
-  result?: any;
-  error?: MCPError;
-}
-
-/**
- * MCPエラーオブジェクトの型定義
- * JSON-RPC 2.0仕様のエラーフォーマット
- *
- * @interface MCPError
- */
-export interface MCPError {
-  code: number;
-  message: string;
-  data?: any;
-}
-
-// MCPツール型定義
+// ツール型定義（既存ツールとの互換性のため残す）
+// 注: MCP SDK使用時は、これらは主にツール内部で使用され、SDKにはZodスキーマとして登録されます
 
 /**
  * MCPツールの基本情報を定義するインターフェース

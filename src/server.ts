@@ -34,6 +34,13 @@ import { MinecraftWikiTool } from "./tools/core/minecraft-wiki";
 
 import { BaseTool } from "./tools/base/tool";
 import { initializeLocale, SupportedLocale } from "./utils/i18n/locale-manager";
+import {
+  optimizeBuildResult,
+  optimizeCommandResult,
+  checkResponseSize,
+} from "./utils/token-optimizer";
+import { SchemaToZodConverter } from "./utils/schema-converter";
+import { enrichErrorWithHints } from "./utils/error-hints";
 
 /**
  * Minecraft Bedrock Edition用MCPサーバー
@@ -108,6 +115,21 @@ export class MinecraftMCPServer {
     // 言語設定を初期化
     initializeLocale(locale);
 
+    // MCP及びツールの初期化
+    await this.setupMCPServer();
+
+    // Socket-BEサーバーの起動
+    this.setupSocketBEServer(port);
+
+    // イベントハンドラーの登録
+    this.setupEventHandlers();
+  }
+
+  /**
+   * MCPサーバーとツールを初期化
+   * @private
+   */
+  private async setupMCPServer(): Promise<void> {
     // ツールの初期化
     this.initializeTools();
 
@@ -120,7 +142,13 @@ export class MinecraftMCPServer {
     // MCP Stdio Transportに接続
     const transport = new StdioServerTransport();
     await this.mcpServer.connect(transport);
+  }
 
+  /**
+   * Socket-BEサーバーを起動
+   * @private
+   */
+  private setupSocketBEServer(port: number): void {
     // Socket-BE Minecraftサーバーを起動
     this.socketBE = new SocketBE({ port });
 
@@ -131,133 +159,180 @@ export class MinecraftMCPServer {
       );
       console.error(`Minecraftから接続: /connect localhost:${port}/ws`);
     }
+  }
+
+  /**
+   * Socket-BEイベントハンドラーを登録
+   * @private
+   */
+  private setupEventHandlers(): void {
+    if (!this.socketBE) return;
 
     this.socketBE.on(ServerEvent.Open, () => {
-      if (process.stdin.isTTY !== false) {
-        console.error("SocketBEサーバーが開始されました");
-      }
-
-      // 代替手段: 10秒後に強制的にワールドとエージェントを設定（ワールド登録待ち）
-      setTimeout(async () => {
-        try {
-          // Socket-BEからワールドを取得
-          const worlds = this.socketBE?.worlds;
-          if (worlds && worlds instanceof Map && worlds.size > 0) {
-            this.currentWorld = Array.from(worlds.values())[0];
-
-            // エージェントを取得
-            try {
-              if (this.currentWorld) {
-                this.currentAgent = await this.currentWorld.getOrCreateAgent();
-              }
-            } catch (agentError) {
-              // エージェント取得に失敗してもサーバーは継続
-            }
-
-            // 仮のプレイヤー情報を設定
-            this.connectedPlayer = {
-              ws: null,
-              name: "MinecraftPlayer",
-              id: uuidv4(),
-            };
-
-            // 全ツールにSocket-BEインスタンスを設定
-            this.tools.forEach((tool) => {
-              tool.setSocketBEInstances(this.currentWorld, this.currentAgent);
-            });
-
-            // Minecraft側に接続確認メッセージを送信
-            try {
-              await this.currentWorld.sendMessage(
-                "§a[MCP Server] 接続完了！AIツールが利用可能になりました。"
-              );
-            } catch (messageError) {
-              // メッセージ送信失敗は無視
-            }
-          }
-        } catch (error) {
-          // 強制設定失敗は無視してサーバー継続
-        }
-      }, 10000);
-
-      // 定期的なワールドチェック（30秒ごと）
-      setInterval(async () => {
-        if (!this.currentWorld && this.socketBE) {
-          const worlds = this.socketBE.worlds;
-          if (worlds instanceof Map && worlds.size > 0) {
-            this.currentWorld = Array.from(worlds.values())[0];
-
-            try {
-              if (this.currentWorld) {
-                this.currentAgent = await this.currentWorld.getOrCreateAgent();
-                this.tools.forEach((tool) => {
-                  tool.setSocketBEInstances(
-                    this.currentWorld,
-                    this.currentAgent
-                  );
-                });
-                await this.currentWorld.sendMessage(
-                  "§a[MCP Server] 遅延接続完了！AIツールが利用可能になりました。"
-                );
-              }
-            } catch (delayedError) {
-              // 遅延設定失敗は無視
-            }
-          }
-        }
-      }, 30000);
+      this.handleServerOpen();
     });
 
     this.socketBE.on(ServerEvent.PlayerJoin, async (ev: any) => {
-      if (process.stdin.isTTY !== false) {
-        console.error("新しいプレイヤーが参加しました:", ev.player.name);
-      }
-
-      // Minecraft側に参加確認メッセージを送信
-      try {
-        await ev.world.sendMessage(
-          `§b[MCP Server] §f${ev.player.name}さん、ようこそ！AIアシスタントが利用可能です。`
-        );
-      } catch (messageError) {
-        // メッセージ送信失敗は無視
-      }
-
-      this.connectedPlayer = {
-        ws: null, // SocketBEではws直接アクセス不要
-        name: ev.player.name || "unknown",
-        id: uuidv4(),
-      };
-
-      this.currentWorld = ev.world;
-
-      // エージェントを取得
-      try {
-        if (this.currentWorld) {
-          this.currentAgent = await this.currentWorld.getOrCreateAgent();
-        }
-      } catch (error) {
-        console.error("Failed to get or create agent:", error);
-        this.currentAgent = null;
-      }
-
-      // 全ツールのSocket-BEインスタンスを更新
-      this.tools.forEach((tool) => {
-        tool.setSocketBEInstances(this.currentWorld, this.currentAgent);
-      });
+      await this.handlePlayerJoin(ev);
     });
 
     this.socketBE.on(ServerEvent.PlayerLeave, (ev: any) => {
-      if (process.stdin.isTTY !== false) {
-        console.error(`プレイヤーが切断されました: ${ev.player.name}`);
-      }
-      this.connectedPlayer = null;
-      this.currentWorld = null;
-      this.currentAgent = null;
+      this.handlePlayerLeave(ev);
+    });
+  }
 
-      // 全ツールのSocket-BEインスタンスをクリア
-      this.tools.forEach((tool) => {
-        tool.setSocketBEInstances(null, null);
-      });
+  /**
+   * サーバーOpen時の処理
+   * @private
+   */
+  private handleServerOpen(): void {
+    if (process.stdin.isTTY !== false) {
+      console.error("SocketBEサーバーが開始されました");
+    }
+
+    // 10秒後に強制的にワールドとエージェントを設定
+    this.scheduleWorldInitialization(10000);
+
+    // 定期的なワールドチェック（30秒ごと）
+    this.startPeriodicWorldCheck(30000);
+  }
+
+  /**
+   * ワールド初期化をスケジュール
+   * @private
+   */
+  private scheduleWorldInitialization(delayMs: number): void {
+    setTimeout(async () => {
+      try {
+        const worlds = this.socketBE?.worlds;
+        if (worlds && worlds instanceof Map && worlds.size > 0) {
+          await this.initializeWorld(Array.from(worlds.values())[0]);
+          await this.sendWorldMessage("§a[MCP Server] 接続完了！AIツールが利用可能になりました。");
+        }
+      } catch (error) {
+        // 強制設定失敗は無視してサーバー継続
+      }
+    }, delayMs);
+  }
+
+  /**
+   * 定期的なワールドチェックを開始
+   * @private
+   */
+  private startPeriodicWorldCheck(intervalMs: number): void {
+    setInterval(async () => {
+      if (!this.currentWorld && this.socketBE) {
+        const worlds = this.socketBE.worlds;
+        if (worlds instanceof Map && worlds.size > 0) {
+          await this.initializeWorld(Array.from(worlds.values())[0]);
+          await this.sendWorldMessage("§a[MCP Server] 遅延接続完了！AIツールが利用可能になりました。");
+        }
+      }
+    }, intervalMs);
+  }
+
+  /**
+   * ワールドとエージェントを初期化し、ツールに設定
+   * @private
+   */
+  private async initializeWorld(world: World): Promise<void> {
+    this.currentWorld = world;
+
+    // エージェントを取得
+    try {
+      this.currentAgent = await this.currentWorld.getOrCreateAgent();
+    } catch (agentError) {
+      // エージェント取得に失敗してもサーバーは継続
+      this.currentAgent = null;
+    }
+
+    // 仮のプレイヤー情報を設定
+    if (!this.connectedPlayer) {
+      this.connectedPlayer = {
+        ws: null,
+        name: "MinecraftPlayer",
+        id: uuidv4(),
+      };
+    }
+
+    // 全ツールにSocket-BEインスタンスを設定
+    this.updateToolsWithWorldInstances();
+  }
+
+  /**
+   * 全ツールにワールドとエージェントを設定
+   * @private
+   */
+  private updateToolsWithWorldInstances(): void {
+    this.tools.forEach((tool) => {
+      tool.setSocketBEInstances(this.currentWorld, this.currentAgent);
+    });
+  }
+
+  /**
+   * ワールドにメッセージを送信（エラー無視）
+   * @private
+   */
+  private async sendWorldMessage(message: string): Promise<void> {
+    try {
+      await this.currentWorld?.sendMessage(message);
+    } catch (messageError) {
+      // メッセージ送信失敗は無視
+    }
+  }
+
+  /**
+   * プレイヤー参加時の処理
+   * @private
+   */
+  private async handlePlayerJoin(ev: any): Promise<void> {
+    if (process.stdin.isTTY !== false) {
+      console.error("新しいプレイヤーが参加しました:", ev.player.name);
+    }
+
+    // Minecraft側に参加確認メッセージを送信
+    await this.sendWorldMessage(
+      `§b[MCP Server] §f${ev.player.name}さん、ようこそ！AIアシスタントが利用可能です。`
+    );
+
+    this.connectedPlayer = {
+      ws: null, // SocketBEではws直接アクセス不要
+      name: ev.player.name || "unknown",
+      id: uuidv4(),
+    };
+
+    this.currentWorld = ev.world;
+
+    // エージェントを取得
+    try {
+      if (this.currentWorld) {
+        this.currentAgent = await this.currentWorld.getOrCreateAgent();
+      }
+    } catch (error) {
+      console.error("Failed to get or create agent:", error);
+      this.currentAgent = null;
+    }
+
+    // 全ツールのSocket-BEインスタンスを更新
+    this.updateToolsWithWorldInstances();
+  }
+
+  /**
+   * プレイヤー退出時の処理
+   * @private
+   */
+  private handlePlayerLeave(ev: any): void {
+    if (process.stdin.isTTY !== false) {
+      console.error(`プレイヤーが切断されました: ${ev.player.name}`);
+    }
+
+    this.connectedPlayer = null;
+    this.currentWorld = null;
+    this.currentAgent = null;
+
+    // 全ツールのSocket-BEインスタンスをクリア
+    this.tools.forEach((tool) => {
+      tool.setSocketBEInstances(null, null);
     });
   }
 
@@ -342,13 +417,21 @@ export class MinecraftMCPServer {
       },
       async ({ message }: { message: string }) => {
         const result = await this.sendMessage(message || "Hello from MCP server!");
+
+        let responseText: string;
+        if (result.success) {
+          responseText = result.message || "Message sent successfully";
+        } else {
+          // エラーメッセージにヒントを追加
+          const errorMsg = result.message || "Failed to send message";
+          responseText = `❌ ${enrichErrorWithHints(errorMsg)}`;
+        }
+
         return {
           content: [
             {
               type: "text",
-              text: result.success
-                ? result.message || "Message sent successfully"
-                : `❌ ${result.message || "Failed to send message"}`,
+              text: responseText,
             },
           ],
         };
@@ -367,13 +450,34 @@ export class MinecraftMCPServer {
       },
       async ({ command }: { command: string }) => {
         const result = await this.executeCommand(command);
+
+        // トークン最適化: コマンド結果を要約
+        const optimized = optimizeCommandResult(result.data);
+
+        let responseText: string;
+        if (result.success) {
+          responseText = `✅ ${optimized.summary}`;
+          if (optimized.details) {
+            responseText += `\n\n${JSON.stringify(optimized.details, null, 2)}`;
+          }
+        } else {
+          // エラーメッセージにヒントを追加
+          const errorMsg = result.message || "Command execution failed";
+          const enrichedError = enrichErrorWithHints(errorMsg);
+          responseText = `❌ ${enrichedError}`;
+        }
+
+        // レスポンスサイズチェック
+        const sizeWarning = checkResponseSize(responseText);
+        if (sizeWarning) {
+          responseText += `\n\n${sizeWarning}`;
+        }
+
         return {
           content: [
             {
               type: "text",
-              text: result.success
-                ? `${result.message || "Command executed successfully"}\n\nData: ${JSON.stringify(result.data, null, 2)}`
-                : `❌ ${result.message || "Command execution failed"}`,
+              text: responseText,
             },
           ],
         };
@@ -385,77 +489,11 @@ export class MinecraftMCPServer {
    * MCP SDKにモジュラーツールを登録
    */
   private registerModularTools(): void {
+    const schemaConverter = new SchemaToZodConverter();
+
     this.tools.forEach((tool) => {
-      // inputSchemaをZod形式に変換
-      const zodSchema: Record<string, z.ZodTypeAny> = {};
-      const properties = tool.inputSchema.properties;
-
-      for (const [key, prop] of Object.entries(properties)) {
-        let zodType: z.ZodTypeAny;
-
-        // プロパティの型に応じてZodスキーマを構築
-        if (prop.type === "string") {
-          zodType = z.string();
-          if (prop.enum) {
-            zodType = z.enum(prop.enum as [string, ...string[]]);
-          }
-        } else if (prop.type === "number") {
-          let numType = z.number();
-          if (prop.minimum !== undefined) {
-            numType = numType.min(prop.minimum);
-          }
-          if (prop.maximum !== undefined) {
-            numType = numType.max(prop.maximum);
-          }
-          zodType = numType;
-        } else if (prop.type === "boolean") {
-          zodType = z.boolean();
-        } else if (prop.type === "array") {
-          if (prop.items) {
-            let itemType: z.ZodTypeAny;
-            if (prop.items.type === "string") {
-              itemType = z.string();
-            } else if (prop.items.type === "number") {
-              itemType = z.number();
-            } else if (prop.items.type === "object" && prop.items.properties) {
-              // オブジェクト配列の場合
-              const itemZodSchema: Record<string, z.ZodTypeAny> = {};
-              for (const [itemKey, itemProp] of Object.entries(prop.items.properties)) {
-                if (itemProp.type === "string") {
-                  itemZodSchema[itemKey] = z.string();
-                } else if (itemProp.type === "number") {
-                  itemZodSchema[itemKey] = z.number();
-                }
-              }
-              itemType = z.object(itemZodSchema);
-            } else {
-              itemType = z.any();
-            }
-            zodType = z.array(itemType);
-          } else {
-            zodType = z.array(z.any());
-          }
-        } else {
-          zodType = z.any();
-        }
-
-        // デフォルト値の設定
-        if (prop.default !== undefined) {
-          zodType = zodType.default(prop.default);
-        }
-
-        // 説明の追加
-        if (prop.description) {
-          zodType = zodType.describe(prop.description);
-        }
-
-        // 必須フィールドでない場合はoptional
-        if (!tool.inputSchema.required?.includes(key)) {
-          zodType = zodType.optional();
-        }
-
-        zodSchema[key] = zodType;
-      }
+      // inputSchemaをZod形式に変換（SchemaToZodConverterを使用）
+      const zodSchema = schemaConverter.convert(tool.inputSchema);
 
       // ツールを登録
       this.mcpServer.registerTool(
@@ -469,15 +507,48 @@ export class MinecraftMCPServer {
           try {
             const result = await tool.execute(args);
 
+            let responseText: string;
+
+            if (result.success) {
+              // 建築ツールの場合は最適化
+              if (tool.name.startsWith('build_')) {
+                const optimized = optimizeBuildResult(result);
+                responseText = `✅ ${optimized.message}`;
+                if (optimized.summary) {
+                  responseText += `\n\n📊 Summary:\n${JSON.stringify(optimized.summary, null, 2)}`;
+                }
+              } else {
+                // 通常ツールの場合
+                responseText = result.message || `Tool ${tool.name} executed successfully`;
+                if (result.data) {
+                  // データサイズチェック
+                  const dataStr = JSON.stringify(result.data, null, 2);
+                  const sizeWarning = checkResponseSize(dataStr);
+
+                  if (sizeWarning) {
+                    // 大きすぎる場合はデータタイプのみ表示
+                    responseText += `\n\n${sizeWarning}`;
+                    responseText += `\nData type: ${Array.isArray(result.data) ? `Array[${result.data.length}]` : typeof result.data}`;
+                  } else {
+                    responseText += `\n\nData: ${dataStr}`;
+                  }
+                }
+              }
+            } else {
+              // エラーメッセージにヒントを追加
+              const errorMsg = result.message || "Tool execution failed";
+              const enrichedError = enrichErrorWithHints(errorMsg);
+              responseText = `❌ ${enrichedError}`;
+              if (result.data) {
+                responseText += `\n\nDetails:\n${JSON.stringify(result.data, null, 2)}`;
+              }
+            }
+
             return {
               content: [
                 {
                   type: "text",
-                  text: result.success
-                    ? result.data
-                      ? `${result.message || `Tool ${tool.name} executed successfully`}\n\nData: ${JSON.stringify(result.data, null, 2)}`
-                      : result.message || `Tool ${tool.name} executed successfully`
-                    : `❌ ${result.message || "Tool execution failed"}${result.data ? `\n\nDetails:\n${JSON.stringify(result.data, null, 2)}` : ""}`,
+                  text: responseText,
                 },
               ],
             };

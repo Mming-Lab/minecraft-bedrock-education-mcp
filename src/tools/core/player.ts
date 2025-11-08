@@ -159,6 +159,11 @@ export class PlayerTool extends BaseTool {
                 player = targetPlayer;
             }
 
+            // Null check for player
+            if (!player) {
+                return { success: false, message: 'No player available' };
+            }
+
             switch (action) {
                 case 'get_info':
                     result = {

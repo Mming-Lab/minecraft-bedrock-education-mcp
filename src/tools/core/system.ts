@@ -172,7 +172,8 @@ export class SystemTool extends BaseTool {
 
             case 'get_score':
                 if (!args.objective_id) return { success: false, message: 'objective_id required for get_score' };
-                const targetForGet = args.player_name || this.world!.localPlayer.name;
+                const targetForGet = args.player_name || this.world!.localPlayer?.name;
+                if (!targetForGet) return { success: false, message: 'No player available' };
                 result = await scoreboard.getScore(targetForGet, args.objective_id);
                 message = `Score retrieved for ${targetForGet} in ${args.objective_id}: ${result}`;
                 break;
@@ -181,7 +182,8 @@ export class SystemTool extends BaseTool {
                 if (!args.objective_id || args.score === undefined) {
                     return { success: false, message: 'objective_id and score required for set_score' };
                 }
-                const targetForSet = args.player_name || this.world!.localPlayer.name;
+                const targetForSet = args.player_name || this.world!.localPlayer?.name;
+                if (!targetForSet) return { success: false, message: 'No player available' };
                 result = await scoreboard.setScore(targetForSet, args.objective_id, args.score);
                 message = `Score set to ${args.score} for ${targetForSet} in ${args.objective_id}`;
                 break;
@@ -190,7 +192,8 @@ export class SystemTool extends BaseTool {
                 if (!args.objective_id || args.score === undefined) {
                     return { success: false, message: 'objective_id and score required for add_score' };
                 }
-                const targetForAdd = args.player_name || this.world!.localPlayer.name;
+                const targetForAdd = args.player_name || this.world!.localPlayer?.name;
+                if (!targetForAdd) return { success: false, message: 'No player available' };
                 result = await scoreboard.addScore(targetForAdd, args.objective_id, args.score);
                 message = `Added ${args.score} to ${targetForAdd} in ${args.objective_id}`;
                 break;
@@ -199,13 +202,15 @@ export class SystemTool extends BaseTool {
                 if (!args.objective_id || args.score === undefined) {
                     return { success: false, message: 'objective_id and score required for remove_score' };
                 }
-                const targetForRemove = args.player_name || this.world!.localPlayer.name;
+                const targetForRemove = args.player_name || this.world!.localPlayer?.name;
+                if (!targetForRemove) return { success: false, message: 'No player available' };
                 result = await scoreboard.removeScore(targetForRemove, args.objective_id, args.score);
                 message = `Removed ${args.score} from ${targetForRemove} in ${args.objective_id}`;
                 break;
 
             case 'reset_score':
-                const targetForReset = args.player_name || this.world!.localPlayer.name;
+                const targetForReset = args.player_name || this.world!.localPlayer?.name;
+                if (!targetForReset) return { success: false, message: 'No player available' };
                 await scoreboard.resetScore(targetForReset, args.objective_id);
                 message = `Score reset for ${targetForReset}`;
                 break;
@@ -217,7 +222,8 @@ export class SystemTool extends BaseTool {
                 break;
 
             case 'get_all_scores':
-                const targetForAll = args.player_name || this.world!.localPlayer.name;
+                const targetForAll = args.player_name || this.world!.localPlayer?.name;
+                if (!targetForAll) return { success: false, message: 'No player available' };
                 result = await scoreboard.getScores(targetForAll);
                 message = `All scores retrieved for ${targetForAll}`;
                 break;
@@ -243,6 +249,11 @@ export class SystemTool extends BaseTool {
                 return { success: false, message: `Player ${args.player_name} not found` };
             }
             player = targetPlayer;
+        }
+
+        // Null check for player
+        if (!player) {
+            return { success: false, message: 'No player available' };
         }
 
         const screen = player.onScreenDisplay;

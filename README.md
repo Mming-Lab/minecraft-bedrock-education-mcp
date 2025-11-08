@@ -1,8 +1,8 @@
 # Minecraft Bedrock MCP Server
 
-[日本語 README はこちら / Japanese README here](README_ja.md)
+[日本語版 README はこちら / Japanese README here](README_ja.md)
 
-A TypeScript MCP server for controlling Minecraft Bedrock Edition and Education Edition.
+A TypeScript-based MCP server for controlling Minecraft Bedrock Edition and Education Edition.
 
 <a href="https://glama.ai/mcp/servers/@Mming-Lab/minecraft-bedrock-mcp-server">
   <img width="380" height="200" src="https://glama.ai/mcp/servers/@Mming-Lab/minecraft-bedrock-mcp-server/badge" alt="Minecraft Bedrock Education MCP server" />
@@ -10,14 +10,16 @@ A TypeScript MCP server for controlling Minecraft Bedrock Edition and Education 
 
 ## Features
 
-- **Reliable Integration**: Stable Minecraft control via WebSocket
-- **Hierarchical Tools**: Core tools (blocks, player, world) + Advanced building tools
-- **MCP Compatible**: Works with Claude Desktop and other MCP clients
-- **Type-safe**: Full TypeScript implementation
+- **Core Tools**: Player, Agent, Blocks, World, Camera, System control
+- **Advanced Building**: 12 types of 3D shape tools (cube, sphere, helix, torus, bezier curves, etc.)
+- **Wiki Integration**: Search Minecraft Wiki for accurate information
+- **Sequence System**: Automatic chaining of multiple operations
+- **Natural Language**: Control Minecraft with natural language
 
 ## Quick Start
 
 ### 1. Installation
+
 ```bash
 git clone https://github.com/Mming-Lab/minecraft-bedrock-education-mcp.git
 cd minecraft-bedrock-education-mcp
@@ -26,122 +28,116 @@ npm run build
 npm start
 ```
 
-### 2. Minecraft Setup
-1. Create world with **cheats enabled** (Bedrock/Education Edition)
-2. Connect from Minecraft: `/connect localhost:8001/ws`
+### 2. Minecraft Connection
 
-### 3. Claude Desktop Setup
-Add to `claude_desktop_config.json`:
+Open a world in Minecraft (with cheats enabled), then in chat:
+```
+/connect localhost:8001/ws
+```
+
+### 3. AI Assistant Setup
+
+Add to your MCP client configuration (e.g., Claude Desktop):
+
 ```json
 {
   "mcpServers": {
     "minecraft-bedrock": {
       "command": "node",
-      "args": ["path/to/dist/server.js"]
+      "args": ["C:/path/to/minecraft-bedrock-education-mcp/dist/server.js"]
     }
   }
 }
 ```
 
-## Features
+**Claude Desktop**: `%APPDATA%\Claude\claude_desktop_config.json` (Windows)
+For other MCP clients, refer to their respective documentation.
 
-- **Core Tools**: `player`, `agent`, `world`, `blocks`, `camera`, `system`, `minecraft_wiki`
-- **Building Tools**: `build_cube`, `build_sphere`, `build_cylinder`, `build_line`, etc.
-- **Wiki Integration**: Search Minecraft Wiki for Bedrock/Education Edition info
-- **Sequence Control**: Chain multiple tools with timing and error handling
-- **Cross-Tool Sequences**: Combine different tools in automated workflows
+## Available Tools
+
+### Core Tools
+- `player` - Player management (location, items, abilities)
+- `agent` - Agent control (movement, rotation, inventory)
+- `blocks` - Block operations (place, remove, fill)
+- `world` - World control (time, weather, game rules)
+- `camera` - Camera control (viewpoint, fade, cinematic)
+- `system` - Scoreboard and UI display
+- `minecraft_wiki` - Wiki search
+- `sequence` - Multi-tool chaining execution
+
+### Building Tools (12 types)
+- `build_cube` - Cube (hollow/filled)
+- `build_sphere` - Sphere
+- `build_cylinder` - Cylinder
+- `build_line` - Line
+- `build_torus` - Torus (donut)
+- `build_helix` - Helix (spiral)
+- `build_ellipsoid` - Ellipsoid
+- `build_paraboloid` - Paraboloid
+- `build_hyperboloid` - Hyperboloid
+- `build_bezier` - Bezier curve
+- `build_rotate` - Rotation transform
+- `build_transform` - Coordinate transform
 
 ## Usage Examples
 
-### Wiki Search
-```javascript
-// Step-by-step wiki search to avoid overwhelming responses
-{
-  "action": "sequence",
-  "steps": [
-    {"type": "search", "query": "give command", "focus": "commands"},
-    {"type": "get_page_summary", "title": "Commands/give"},
-    {"type": "get_section", "title": "Commands/give", "section": "Syntax"}
-  ]
-}
+### Basic Usage
+
+Just talk naturally to the AI assistant:
+
+```
+Tell me my current coordinates
+→ Gets player position
+
+Place a diamond block in front of me
+→ Places block
+
+Build a glass dome with radius 10
+→ Sphere building (hollow)
+
+Create a spiral staircase with stone bricks
+→ Helix building
+
+How many villagers are nearby?
+→ Entity search
 ```
 
-### Building Sequence
-```javascript
-{
-  "steps": [
-    {"tool": "player", "type": "teleport", "x": 0, "y": 70, "z": 0},
-    {"tool": "build_cube", "type": "build", "x1": -5, "y1": 70, "z1": -5, "x2": 5, "y2": 75, "z2": 5, "material": "diamond_block"},
-    {"tool": "camera", "type": "move_to", "x": 10, "y": 80, "z": 10, "look_at_x": 0, "look_at_y": 72, "look_at_z": 0}
-  ]
-}
+### Complex Building
+
+```
+I want to build a castle
+→ AI automatically combines multiple tools to build
+
+Create a smooth bridge using bezier curves
+→ Natural curved bridge with bezier tool
+
+Make it night and start raining
+→ World control (time & weather)
 ```
 
-## Development
+### Automatic Error Correction
 
-```bash
-npm run build    # Compile TypeScript
-npm run dev      # Build and run
-npm test         # Run test client
+```
+User: "Place a daimond_block"
+System: ❌ Unknown block: minecraft:daimond_block
+        💡 Use the minecraft_wiki tool to search for valid block IDs
+
+AI: Let me search the wiki for the correct ID...
+    → Automatically searches for and corrects to "diamond_block"
 ```
 
-### Port Configuration
-```json
-{
-  "args": ["path/to/dist/server.js", "--port=8002"]
-}
-```
+## Technical Specifications
 
-## Tools
-
-### Core Tools
-- `player` - Teleport, give items, gamemode, XP
-- `agent` - Move, build, mine, inventory management  
-- `world` - Time, weather, run commands
-- `blocks` - Place/fill blocks, query terrain
-- `camera` - Cinematic shots, smooth movement
-- `system` - Scoreboards, titles, action bars
-- `minecraft_wiki` - Search wiki for Bedrock/Education info
-- `sequence` - Chain multiple tools together
-
-### Building Tools
-- `build_cube`, `build_sphere`, `build_cylinder` - Basic shapes
-- `build_line`, `build_helix`, `build_torus` - Complex geometry
-- `build_ellipsoid`, `build_paraboloid`, `build_hyperboloid` - Advanced shapes
-- `build_bezier` - Smooth Bezier curves (bridges, arches, decorative paths) 🆕
-- `build_rotate`, `build_transform` - Copy and transform structures
-
-## Multilingual Support (i18n)
-
-Error messages support English and Japanese:
-
-```bash
-# Start with Japanese
-npm start -- --lang=ja
-
-# Start with English
-npm start -- --lang=en
-
-# Auto-detect (system language)
-npm start
-```
-
-Claude Desktop configuration:
-```json
-{
-  "mcpServers": {
-    "minecraft-bedrock-education": {
-      "args": ["path/to/dist/server.js", "--lang=ja"]
-    }
-  }
-}
-```
+- **Token Optimization**: Automatic data compression (98% reduction)
+- **Error Auto-correction**: AI detects and fixes mistakes automatically
+- **Multilingual**: Japanese/English support
 
 ## Requirements
 
-- Node.js 16+
-- Minecraft Bedrock/Education Edition with cheats
-- MCP client (Claude Desktop, etc.)
+- **Node.js** 16 or higher
+- **Minecraft Bedrock Edition** or **Education Edition**
+- World with **cheats enabled**
+- **MCP client** (e.g., Claude Desktop)
 
 ## License
 
@@ -149,4 +145,13 @@ GPL-3.0
 
 ## Acknowledgments
 
-- [SocketBE](https://github.com/tutinoko2048/SocketBE) - Minecraft Bedrock WebSocket integration
+- [SocketBE](https://github.com/tutinoko2048/SocketBE) - Minecraft Bedrock WebSocket integration library
+- [Model Context Protocol](https://modelcontextprotocol.io) - AI integration protocol specification
+- [Anthropic](https://www.anthropic.com) - Claude AI and MCP TypeScript SDK
+
+## Related Links
+
+- [Official MCP Specification](https://modelcontextprotocol.io)
+- [Socket-BE GitHub](https://github.com/tutinoko2048/SocketBE)
+- [Minecraft Wiki](https://minecraft.wiki)
+- [Glama MCP Servers](https://glama.ai/mcp/servers)

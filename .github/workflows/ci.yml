@@ -62,6 +62,13 @@ jobs:
         env:
           PROPERTY_RUNS: 500
 
+      # Decodes real records captured from a running Education Edition world - four
+      # subchunks at four bit widths and three saved structures. No game, no database, no
+      # network: the formats are pure functions over bytes, so they belong here.
+      - name: World records
+        working-directory: packages/server
+        run: node test/world.test.mjs
+
       # Searches the parameter space for inputs that break an invariant, rather than checking
       # the handful a fixed case happens to cover. It found a helix that came out in two
       # pieces at a radius no golden case used.

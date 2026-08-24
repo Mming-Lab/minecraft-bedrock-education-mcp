@@ -1,0 +1,122 @@
+{
+  "case": "bezier/one-control",
+  "verdict": "spec-change",
+  "legacy": {
+    "count": 18,
+    "distinct": 18,
+    "dupCount": 0,
+    "nonIntegerCount": 0,
+    "nonFiniteCount": 0,
+    "outOfBoundsCount": 0,
+    "bbox": {
+      "min": [
+        0,
+        0,
+        0
+      ],
+      "max": [
+        10,
+        5,
+        0
+      ]
+    },
+    "centroid": [
+      4.833333,
+      2.5,
+      0
+    ],
+    "positions": [
+      [
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        1,
+        0
+      ],
+      [
+        1,
+        1,
+        0
+      ],
+      [
+        1,
+        2,
+        0
+      ],
+      [
+        2,
+        3,
+        0
+      ],
+      [
+        2,
+        4,
+        0
+      ],
+      [
+        3,
+        4,
+        0
+      ],
+      [
+        4,
+        4,
+        0
+      ],
+      [
+        5,
+        4,
+        0
+      ],
+      [
+        5,
+        5,
+        0
+      ],
+      [
+        6,
+        4,
+        0
+      ],
+      [
+        7,
+        3,
+        0
+      ],
+      [
+        7,
+        4,
+        0
+      ],
+      [
+        8,
+        2,
+        0
+      ],
+      [
+        8,
+        3,
+        0
+      ],
+      [
+        9,
+        0,
+        0
+      ],
+      [
+        9,
+        1,
+        0
+      ],
+      [
+        10,
+        0,
+        0
+      ]
+    ]
+  },
+  "rationale": "The legacy default of 50 segments oversampled the curve and relied on deduplication to thin it back out. The rewrite samples at roughly one point per block of the control polygon. Both trace the same curve and both are gap-free - verified at a maximum Chebyshev step of 1 - but the rewrite emits 15 blocks where the legacy emitted 18."
+}

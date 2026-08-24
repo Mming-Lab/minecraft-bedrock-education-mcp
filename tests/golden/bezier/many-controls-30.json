@@ -1,0 +1,223 @@
+{
+  "case": "bezier/many-controls-30",
+  "verdict": "bug-fixed",
+  "note": "B6: factorial overflow probe",
+  "legacy": {
+    "count": 37,
+    "distinct": 37,
+    "dupCount": 0,
+    "nonIntegerCount": 0,
+    "nonFiniteCount": 0,
+    "outOfBoundsCount": 0,
+    "bbox": {
+      "min": [
+        0,
+        0,
+        0
+      ],
+      "max": [
+        40,
+        2,
+        0
+      ]
+    },
+    "centroid": [
+      17.108108,
+      1.324324,
+      0
+    ],
+    "positions": [
+      [
+        0,
+        0,
+        0
+      ],
+      [
+        1,
+        1,
+        0
+      ],
+      [
+        2,
+        1,
+        0
+      ],
+      [
+        3,
+        2,
+        0
+      ],
+      [
+        4,
+        2,
+        0
+      ],
+      [
+        5,
+        1,
+        0
+      ],
+      [
+        6,
+        1,
+        0
+      ],
+      [
+        7,
+        1,
+        0
+      ],
+      [
+        8,
+        2,
+        0
+      ],
+      [
+        9,
+        2,
+        0
+      ],
+      [
+        10,
+        1,
+        0
+      ],
+      [
+        11,
+        1,
+        0
+      ],
+      [
+        12,
+        1,
+        0
+      ],
+      [
+        13,
+        2,
+        0
+      ],
+      [
+        14,
+        1,
+        0
+      ],
+      [
+        14,
+        2,
+        0
+      ],
+      [
+        15,
+        1,
+        0
+      ],
+      [
+        16,
+        1,
+        0
+      ],
+      [
+        17,
+        2,
+        0
+      ],
+      [
+        18,
+        2,
+        0
+      ],
+      [
+        19,
+        1,
+        0
+      ],
+      [
+        20,
+        1,
+        0
+      ],
+      [
+        21,
+        1,
+        0
+      ],
+      [
+        21,
+        2,
+        0
+      ],
+      [
+        22,
+        2,
+        0
+      ],
+      [
+        23,
+        2,
+        0
+      ],
+      [
+        24,
+        1,
+        0
+      ],
+      [
+        25,
+        1,
+        0
+      ],
+      [
+        26,
+        1,
+        0
+      ],
+      [
+        26,
+        2,
+        0
+      ],
+      [
+        27,
+        2,
+        0
+      ],
+      [
+        28,
+        2,
+        0
+      ],
+      [
+        29,
+        2,
+        0
+      ],
+      [
+        30,
+        1,
+        0
+      ],
+      [
+        32,
+        1,
+        0
+      ],
+      [
+        35,
+        0,
+        0
+      ],
+      [
+        40,
+        0,
+        0
+      ]
+    ]
+  },
+  "bugId": "B6",
+  "rationale": "bernsteinBasis builds the binomial coefficient from factorials, so factorial(171) overflows to Infinity and the basis becomes Infinity/Infinity = NaN. 30 control points is below that threshold but precision has already degraded; the rewrite should compute the coefficient iteratively (result = result * (n - i) / (i + 1)), which never overflows. makecode-minecraft-geometry-ext already does this.",
+  "reference": "src/utils/geometry/coordinate-utils.ts:322-331",
+  "requireInvariants": [
+    "I9"
+  ]
+}

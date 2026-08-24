@@ -1,0 +1,46 @@
+{
+  "case": "rotate/array-90",
+  "verdict": "equivalent",
+  "legacy": {
+    "count": 3,
+    "distinct": 3,
+    "dupCount": 0,
+    "nonIntegerCount": 0,
+    "nonFiniteCount": 0,
+    "outOfBoundsCount": 0,
+    "bbox": {
+      "min": [
+        -1,
+        0,
+        0
+      ],
+      "max": [
+        0,
+        1,
+        1
+      ]
+    },
+    "centroid": [
+      -0.333333,
+      0.333333,
+      0.333333
+    ],
+    "positions": [
+      [
+        -1,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        1
+      ],
+      [
+        0,
+        1,
+        0
+      ]
+    ]
+  }
+}

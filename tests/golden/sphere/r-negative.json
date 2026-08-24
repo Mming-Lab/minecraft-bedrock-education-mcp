@@ -1,0 +1,18 @@
+{
+  "case": "sphere/r-negative",
+  "verdict": "undefined-behavior",
+  "note": "B7",
+  "legacy": {
+    "count": 0,
+    "distinct": 0,
+    "dupCount": 0,
+    "nonIntegerCount": 0,
+    "nonFiniteCount": 0,
+    "outOfBoundsCount": 0,
+    "positions": []
+  },
+  "bugId": "B7",
+  "rationale": "A negative radius returns an empty array with no signal at all. The caller cannot distinguish 'nothing to build' from 'you passed nonsense'. The rewrite should reject it at the schema boundary.",
+  "reference": "src/utils/geometry/sphere-calculator.ts",
+  "expectThrows": "InvalidArgument"
+}

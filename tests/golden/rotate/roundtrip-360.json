@@ -1,0 +1,36 @@
+{
+  "case": "rotate/roundtrip-360",
+  "verdict": "equivalent",
+  "legacy": {
+    "count": 1,
+    "distinct": 1,
+    "dupCount": 0,
+    "nonIntegerCount": 0,
+    "nonFiniteCount": 0,
+    "outOfBoundsCount": 0,
+    "bbox": {
+      "min": [
+        3,
+        4,
+        5
+      ],
+      "max": [
+        3,
+        4,
+        5
+      ]
+    },
+    "centroid": [
+      3,
+      4,
+      5
+    ],
+    "positions": [
+      [
+        3,
+        4,
+        5
+      ]
+    ]
+  }
+}

@@ -1,0 +1,18 @@
+{
+  "case": "paraboloid/h1",
+  "verdict": "undefined-behavior",
+  "note": "B3: 0/0 = NaN",
+  "legacy": {
+    "count": 0,
+    "distinct": 0,
+    "dupCount": 0,
+    "nonIntegerCount": 0,
+    "nonFiniteCount": 0,
+    "outOfBoundsCount": 0,
+    "positions": []
+  },
+  "bugId": "B3",
+  "rationale": "progress = i / (steps - 1) is 0/0 when steps is 1, so the comparison against 0 is false for every sample and the function returns empty without reporting anything.",
+  "reference": "src/utils/geometry/paraboloid-calculator.ts:27",
+  "expectThrows": "InvalidArgument"
+}

@@ -1,0 +1,18 @@
+{
+  "case": "ellipsoid/rz0",
+  "verdict": "undefined-behavior",
+  "note": "B4: divide by zero",
+  "legacy": {
+    "count": 0,
+    "distinct": 0,
+    "dupCount": 0,
+    "nonIntegerCount": 0,
+    "nonFiniteCount": 0,
+    "outOfBoundsCount": 0,
+    "positions": []
+  },
+  "bugId": "B4",
+  "rationale": "A zero radius divides by zero, producing Infinity and then an empty result. Reject the input instead.",
+  "reference": "src/utils/geometry/ellipsoid-calculator.ts:31-35",
+  "expectThrows": "InvalidArgument"
+}

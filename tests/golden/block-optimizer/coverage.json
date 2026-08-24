@@ -1,0 +1,68 @@
+[
+  {
+    "id": "solid-cube-4x4x4",
+    "inputCount": 64,
+    "distinctInput": 64,
+    "boxes": 1,
+    "covered": 64,
+    "missing": 0,
+    "extra": 0,
+    "overlaps": 0,
+    "exact": true
+  },
+  {
+    "id": "sphere-r5",
+    "inputCount": 515,
+    "distinctInput": 515,
+    "boxes": 43,
+    "covered": 515,
+    "missing": 0,
+    "extra": 0,
+    "overlaps": 0,
+    "exact": true
+  },
+  {
+    "id": "hollow-sphere-r5",
+    "inputCount": 264,
+    "distinctInput": 264,
+    "boxes": 83,
+    "covered": 264,
+    "missing": 0,
+    "extra": 0,
+    "overlaps": 0,
+    "exact": true
+  },
+  {
+    "id": "line",
+    "inputCount": 11,
+    "distinctInput": 11,
+    "boxes": 7,
+    "covered": 11,
+    "missing": 0,
+    "extra": 0,
+    "overlaps": 0,
+    "exact": true
+  },
+  {
+    "id": "single",
+    "inputCount": 1,
+    "distinctInput": 1,
+    "boxes": 1,
+    "covered": 1,
+    "missing": 0,
+    "extra": 0,
+    "overlaps": 0,
+    "exact": true
+  },
+  {
+    "id": "empty",
+    "inputCount": 0,
+    "distinctInput": 0,
+    "boxes": 0,
+    "covered": 0,
+    "missing": 0,
+    "extra": 0,
+    "overlaps": 0,
+    "exact": true
+  }
+]

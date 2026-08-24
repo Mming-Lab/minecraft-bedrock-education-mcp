@@ -1,0 +1,41 @@
+{
+  "case": "bezier/segments-1",
+  "verdict": "equivalent",
+  "legacy": {
+    "count": 2,
+    "distinct": 2,
+    "dupCount": 0,
+    "nonIntegerCount": 0,
+    "nonFiniteCount": 0,
+    "outOfBoundsCount": 0,
+    "bbox": {
+      "min": [
+        0,
+        0,
+        0
+      ],
+      "max": [
+        10,
+        0,
+        0
+      ]
+    },
+    "centroid": [
+      5,
+      0,
+      0
+    ],
+    "positions": [
+      [
+        0,
+        0,
+        0
+      ],
+      [
+        10,
+        0,
+        0
+      ]
+    ]
+  }
+}

@@ -1,0 +1,16 @@
+{
+  "case": "cylinder/h0",
+  "verdict": "undefined-behavior",
+  "legacy": {
+    "count": 0,
+    "distinct": 0,
+    "dupCount": 0,
+    "nonIntegerCount": 0,
+    "nonFiniteCount": 0,
+    "outOfBoundsCount": 0,
+    "positions": []
+  },
+  "rationale": "Height 0 has no layers; reject rather than return empty.",
+  "reference": "src/utils/geometry/cylinder-calculator.ts",
+  "expectThrows": "InvalidArgument"
+}

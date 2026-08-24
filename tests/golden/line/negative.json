@@ -1,0 +1,86 @@
+{
+  "case": "line/negative",
+  "verdict": "equivalent",
+  "legacy": {
+    "count": 11,
+    "distinct": 11,
+    "dupCount": 0,
+    "nonIntegerCount": 0,
+    "nonFiniteCount": 0,
+    "outOfBoundsCount": 0,
+    "bbox": {
+      "min": [
+        -5,
+        -5,
+        -5
+      ],
+      "max": [
+        5,
+        5,
+        5
+      ]
+    },
+    "centroid": [
+      0,
+      0,
+      0
+    ],
+    "positions": [
+      [
+        -5,
+        -5,
+        -5
+      ],
+      [
+        -4,
+        -4,
+        -4
+      ],
+      [
+        -3,
+        -3,
+        -3
+      ],
+      [
+        -2,
+        -2,
+        -2
+      ],
+      [
+        -1,
+        -1,
+        -1
+      ],
+      [
+        0,
+        0,
+        0
+      ],
+      [
+        1,
+        1,
+        1
+      ],
+      [
+        2,
+        2,
+        2
+      ],
+      [
+        3,
+        3,
+        3
+      ],
+      [
+        4,
+        4,
+        4
+      ],
+      [
+        5,
+        5,
+        5
+      ]
+    ]
+  }
+}

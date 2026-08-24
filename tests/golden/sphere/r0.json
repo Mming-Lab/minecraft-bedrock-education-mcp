@@ -1,0 +1,39 @@
+{
+  "case": "sphere/r0",
+  "verdict": "undefined-behavior",
+  "legacy": {
+    "count": 1,
+    "distinct": 1,
+    "dupCount": 0,
+    "nonIntegerCount": 0,
+    "nonFiniteCount": 0,
+    "outOfBoundsCount": 0,
+    "bbox": {
+      "min": [
+        0,
+        0,
+        0
+      ],
+      "max": [
+        0,
+        0,
+        0
+      ]
+    },
+    "centroid": [
+      0,
+      0,
+      0
+    ],
+    "positions": [
+      [
+        0,
+        0,
+        0
+      ]
+    ]
+  },
+  "rationale": "Radius 0 is not a buildable sphere; reject rather than return empty.",
+  "reference": "src/utils/geometry/sphere-calculator.ts",
+  "expectThrows": "InvalidArgument"
+}

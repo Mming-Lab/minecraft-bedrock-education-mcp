@@ -1,0 +1,18 @@
+{
+  "compilerOptions": {
+    "target": "ES2020",
+    "module": "commonjs",
+    "moduleResolution": "node",
+    "strict": false,
+    "noImplicitAny": false,
+    "skipLibCheck": true,
+    "types": [],
+    "outDir": "dist-legacy",
+    "rootDir": "../../src"
+  },
+  "include": [
+    "../../src/utils/geometry/**/*.ts",
+    "../../src/utils/math/**/*.ts",
+    "../../src/utils/block-optimizer.ts"
+  ]
+}

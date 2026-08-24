@@ -1,0 +1,31 @@
+{
+  "case": "sphere/r8",
+  "verdict": "equivalent",
+  "legacy": {
+    "count": 2109,
+    "distinct": 2109,
+    "dupCount": 0,
+    "nonIntegerCount": 0,
+    "nonFiniteCount": 0,
+    "outOfBoundsCount": 0,
+    "bbox": {
+      "min": [
+        -8,
+        -8,
+        -8
+      ],
+      "max": [
+        8,
+        8,
+        8
+      ]
+    },
+    "centroid": [
+      0,
+      0,
+      0
+    ],
+    "sha256": "00107431c9d9386497b1146aef8859e6769869b8b55c732da7bcc2957b11cbb1",
+    "storage": "hash-only"
+  }
+}

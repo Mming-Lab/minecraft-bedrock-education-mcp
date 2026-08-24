@@ -1,0 +1,36 @@
+{
+  "case": "rotate/x90",
+  "verdict": "equivalent",
+  "legacy": {
+    "count": 1,
+    "distinct": 1,
+    "dupCount": 0,
+    "nonIntegerCount": 0,
+    "nonFiniteCount": 0,
+    "outOfBoundsCount": 0,
+    "bbox": {
+      "min": [
+        0,
+        0,
+        -1
+      ],
+      "max": [
+        0,
+        0,
+        -1
+      ]
+    },
+    "centroid": [
+      0,
+      0,
+      -1
+    ],
+    "positions": [
+      [
+        0,
+        0,
+        -1
+      ]
+    ]
+  }
+}

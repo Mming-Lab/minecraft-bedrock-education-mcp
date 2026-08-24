@@ -10,13 +10,16 @@
   "dependencies": {
     "@modelcontextprotocol/server": "2.0.0",
     "prismarine-nbt": "^2.8.0",
+    "socket-be": "^2.6.0",
     "zod": "^4.2.0"
   },
   "devDependencies": {
     "@modelcontextprotocol/client": "^2.0.0",
     "@types/node": "^26.2.0",
+    "@types/ws": "^8.18.1",
     "fast-check": "^4.9.0",
-    "typescript": "5.9.3"
+    "typescript": "5.9.3",
+    "ws": "^8.21.3"
   },
   "bin": {
     "minecraft-bedrock-education-mcp": "./dist/index.js"
@@ -26,7 +29,7 @@
   ],
   "scripts": {
     "build": "tsc -p .",
-    "test": "npm run build && node test/tools.test.mjs && node test/commands.test.mjs && node test/optimize.test.mjs && node test/world.test.mjs && node test/bridge.test.mjs && node test/geometry.property.test.mjs && node test/server.test.mjs",
+    "test": "npm run build && node test/tools.test.mjs && node test/commands.test.mjs && node test/optimize.test.mjs && node test/world.test.mjs && node test/bridge.test.mjs && node test/transport.test.mjs && node test/geometry.property.test.mjs && node test/server.test.mjs",
     "test:golden": "node ../../tools/golden-extract/validate.mjs --geometry ./test/golden-adapter.mjs --math ./test/golden-adapter.mjs --optimizer ./dist/commands/optimize.js",
     "start": "node dist/index.js"
   }

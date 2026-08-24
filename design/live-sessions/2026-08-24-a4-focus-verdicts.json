@@ -1,0 +1,180 @@
+{
+  "focus_timeline": [
+    {
+      "at": 895,
+      "answered": true
+    }
+  ],
+  "world_answered_after_ms": 895,
+  "polls_before_answer": 1,
+  "world_responds": true,
+  "reading": "The world answered on the first poll, so it was never paused during this session.",
+  "testforblock_hit": {
+    "code": 0,
+    "message": "ブロックは 2, -59, 2 で見つかりました。",
+    "timedOut": false
+  },
+  "testforblock_miss": {
+    "code": -2147352576,
+    "message": "2,-59,2 にあるブロックは ダイヤモンドブロック です (予想では 石)。",
+    "timedOut": false
+  },
+  "testforblock_regex_matches": false,
+  "testforblock_regex_capture": null,
+  "testforblock_is_localised": true,
+  "execute_if_block_hit": {
+    "code": 0,
+    "message": null,
+    "timedOut": false
+  },
+  "execute_if_block_miss": {
+    "code": -2147352576,
+    "message": "サブコマンド if block テストの実行に失敗しました。",
+    "timedOut": false
+  },
+  "execute_if_block_discriminates": true,
+  "control_present": {
+    "code": -2147483648,
+    "message": "構文エラー: \"\": at \"stforblock>><<\" は無効です",
+    "timedOut": false
+  },
+  "control_absent": {
+    "code": -2147483648,
+    "message": "構文エラー: \"zzznotacommandatall\": at \">>zzznotacommandatall<<\" は無効です",
+    "timedOut": false
+  },
+  "controls_differ": true,
+  "command_existence": {
+    "testforblock": {
+      "verdict": "present (matches the present control)",
+      "code": -2147483648,
+      "message": "構文エラー: \"\": at \"stforblock>><<\" は無効です",
+      "timedOut": false
+    },
+    "zzznotacommandatall": {
+      "verdict": "absent (matches the absent control)",
+      "code": -2147483648,
+      "message": "構文エラー: \"zzznotacommandatall\": at \">>zzznotacommandatall<<\" は無効です",
+      "timedOut": false
+    },
+    "getchunkdata": {
+      "verdict": "present (matches the present control)",
+      "code": -2147483648,
+      "message": "構文エラー: \"\": at \"tchunkdata>><<\" は無効です",
+      "timedOut": false
+    },
+    "getchunks": {
+      "verdict": "present (matches the present control)",
+      "code": -2147483648,
+      "message": "構文エラー: \"\": at \"getchunks>><<\" は無効です",
+      "timedOut": false
+    },
+    "gettopsolidblock": {
+      "verdict": "present (matches the present control)",
+      "code": -2147483648,
+      "message": "構文エラー: \"\": at \"solidblock>><<\" は無効です",
+      "timedOut": false
+    },
+    "querytarget": {
+      "verdict": "present (matches the present control)",
+      "code": -2147483648,
+      "message": "構文エラー: \"\": at \"uerytarget>><<\" は無効です",
+      "timedOut": false
+    },
+    "agent": {
+      "verdict": "present (matches the present control)",
+      "code": -2147483648,
+      "message": "構文エラー: \"\": at \"agent>><<\" は無効です",
+      "timedOut": false
+    }
+  },
+  "structure_save": {
+    "code": 0,
+    "message": "ストラクチャーを mystructure:probe_readback という名前で保存しました",
+    "timedOut": false
+  },
+  "testforblocks": {
+    "code": 0,
+    "message": "9 個のブロックを比較しました",
+    "timedOut": false
+  },
+  "corpus_total": 17,
+  "corpus_rejected_count": 8,
+  "corpus_rejected": [
+    {
+      "command": "fill 0 0 0 1 1 1 minecraft:air replace minecraft:oak_log [\"pillar_axis\"=\"y\"]",
+      "sent": "fill ~ ~ ~ ~1 ~1 ~1 minecraft:air replace minecraft:oak_log [\"pillar_axis\"=\"y\"]",
+      "code": -2147352576,
+      "message": "0 個のブロックで満たしました",
+      "timedOut": false
+    },
+    {
+      "command": "fill 0 0 0 ~60 ~60 ~60 minecraft:stone replace",
+      "sent": "fill ~ ~ ~ ~60 ~60 ~60 minecraft:stone replace",
+      "code": -2147352576,
+      "message": "指定した領域にあるブロックが多すぎます (226981 > 32768)",
+      "timedOut": false
+    },
+    {
+      "command": "fill 0 64 0 4 64 4 minecraft:stone replace minecraft:dirt",
+      "sent": "fill ~ ~64 ~ ~4 ~64 ~4 minecraft:stone replace minecraft:dirt",
+      "code": -2147352576,
+      "message": "0 個のブロックで満たしました",
+      "timedOut": false
+    },
+    {
+      "command": "setblock -5 -64 -12 minecraft:stone replace",
+      "sent": "setblock ~-5 ~-64 ~-12 minecraft:stone replace",
+      "code": -2147352576,
+      "message": "そのブロックは設置できません",
+      "timedOut": false
+    },
+    {
+      "command": "setblock 0 0 0 minecraft:stone keep",
+      "sent": "setblock ~ ~ ~ minecraft:stone keep",
+      "code": -2147352576,
+      "message": "そのブロックは設置できません",
+      "timedOut": false
+    },
+    {
+      "command": "setblock 0 0 0 minecraft:stone replace",
+      "sent": "setblock ~ ~ ~ minecraft:stone replace",
+      "code": -2147352576,
+      "message": "そのブロックは設置できません",
+      "timedOut": false
+    },
+    {
+      "command": "setblock 0 0 0 myaddon:reactor replace",
+      "sent": "setblock ~ ~ ~ myaddon:reactor replace",
+      "code": -2147483648,
+      "message": "構文エラー: \"myaddon:reactor\": at \"ock ~ ~ ~ >>myaddon:reactor<< replace\" は無効です",
+      "timedOut": false
+    },
+    {
+      "command": "setblock 1 2 3 minecraft:oak_log [\"pillar_axis\"=\"x\"] keep",
+      "sent": "setblock ~1 ~2 ~3 minecraft:oak_log [\"pillar_axis\"=\"x\"] keep",
+      "code": -2147352576,
+      "message": "そのブロックは設置できません",
+      "timedOut": false
+    }
+  ],
+  "caret_results": [
+    {
+      "command": "setblock ^ ^ ^5 minecraft:stone replace",
+      "code": 0,
+      "message": "ブロックが設置される"
+    }
+  ],
+  "caret_accepted": true,
+  "fill_32768": {
+    "code": -2147352576,
+    "message": "ワールドの範囲外にブロックを設置することはできません",
+    "timedOut": false
+  },
+  "fill_33792": {
+    "code": -2147352576,
+    "message": "指定した領域にあるブロックが多すぎます (33792 > 32768)",
+    "timedOut": false
+  },
+  "fill_volume_limit_is_32768": false
+}

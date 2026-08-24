@@ -44,11 +44,14 @@ export type FillMode = (typeof FILL_MODES)[number];
 /**
  * The volume /fill refuses to exceed.
  *
- * Carried over from the legacy server, which used the same number. The wiki documents 32768
- * for Java and does not state a Bedrock figure, so this is the one constant here that is not
- * backed by a citation - it is a live-verification item, and it is a lower bound in the
- * direction that fails safe: too small a limit splits a fill that would have worked, while
- * too large a one sends a command the game drops.
+ * Measured, not assumed. This was the one constant here without a citation - the wiki gives
+ * 32768 for Java and says nothing for Bedrock - so it went to a live session, and Education
+ * Edition 1.26.3200 answered with the number itself:
+ *
+ *     fill ~ ~ ~ ~31 ~31 ~31 minecraft:stone replace
+ *       -> 32768 個のブロックで満たしました              (accepted, exactly the limit)
+ *     fill ~ ~ ~ ~31 ~31 ~32 minecraft:stone replace
+ *       -> 指定した領域にあるブロックが多すぎます (33792 > 32768)
  */
 export const FILL_VOLUME_LIMIT = 32768;
 

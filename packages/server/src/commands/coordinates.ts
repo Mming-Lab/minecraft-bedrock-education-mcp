@@ -13,11 +13,14 @@
  * ## What is verified and what is not
  *
  * The argument grammar and the block-state syntax below are from minecraft.wiki's Bedrock
- * sections. Caret notation is the loose end: the /fill page lists it among the accepted
- * coordinate forms for Bedrock, while the Coordinates page describes it only under Java. So
- * `local()` exists and formats correctly, no tool emits it, and confirming that Bedrock's
- * /setblock and /fill accept it is a live-verification item. Everything the build tools
- * produce is absolute, which the wiki is unambiguous about.
+ * sections. Caret notation was the loose end - the /fill page lists it among Bedrock's
+ * accepted coordinate forms while the Coordinates page describes it only under Java - and it
+ * has now been settled at a live session. Education Edition 1.26.3200 takes it:
+ *
+ *     setblock ^ ^ ^5 minecraft:stone replace  ->  ブロックが設置される
+ *
+ * The build tools still emit only absolute coordinates, but `local()` is a supported form
+ * rather than a guess.
  */
 
 import { InvalidArgumentError, type Position } from '../geometry/core.js';

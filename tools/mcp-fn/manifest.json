@@ -1,0 +1,17 @@
+{
+  "format_version": 2,
+  "header": {
+    "name": "MCP probe (function, no script)",
+    "description": "Contains one .mcfunction and no script at all. If /function mcpprobe runs, behavior packs load here and scripting is what is blocked. If it does not, the packs are not loading despite being listed as active.",
+    "uuid": "f0e1d2c3-b4a5-4968-8776-5a4b3c2d1e00",
+    "version": [0, 0, 1],
+    "min_engine_version": [1, 21, 0]
+  },
+  "modules": [
+    {
+      "type": "data",
+      "uuid": "f0e1d2c3-b4a5-4968-8776-5a4b3c2d1e01",
+      "version": [0, 0, 1]
+    }
+  ]
+}

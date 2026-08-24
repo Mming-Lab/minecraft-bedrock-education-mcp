@@ -4,169 +4,121 @@ date: 2026-08-24
 status: 実機測定により決定
 ---
 
-# 結論
+# 結論：アドオン（Script API ブリッジ）が主、ワールドDBが従
 
-**第一選択：`structure save` → ワールドDB読み出し。** 正確なブロック名・ブロック状態・
-ワールド座標が、約2〜7秒で取れる。往復コストはゼロ（コマンド1本 + ファイル読み）。
+**16×16×16 = 4096ブロックを、1往復・3.7秒・欠落ゼロで読める。** 正確なブロック名と
+ブロック状態付き。同一PC縛りも不要。
 
-**ただしサーバとゲームが同一マシンにある場合に限る。** 教育版はiPadやChromebookでも動くので、
-その場合はコマンド経由にフォールバックする。両方を実装する必要がある。
-
-| 経路 | 得られるもの | 遅延 | 範囲 | 前提 |
-|---|---|---|---|---|
-| **`structure save` + DB** | **正確なブロック名＋状態＋座標** | **約2〜7秒** | 1辺64ブロック／回（複数回で拡張可） | 同一マシン |
-| DB直読み（保存待ち） | 同上、チャンク単位 | **約25秒** | 無制限 | 同一マシン |
-| `getchunkdata` | 256列の高さ（正確）＋表面色（陰影込み） | 即座 | 16×16列／コマンド | なし |
-| `gettopsolidblock` | 正確なブロック名（翻訳なし） | 即座 | 1列 | なし |
-| `execute if block` | 指定座標の一致判定 | 即座（100並列で8ms/本） | 1座標 | なし |
-
-`testforblock` は使わない（日本語クライアントで `statusMessage` もブロック名も翻訳される）。
+| 経路 | ブロック識別 | 状態 | 範囲 | 実測 | 前提 |
+|---|---|---|---|---|---|
+| **アドオン `readregion`** | **正確** | **取れる** | 任意 | **4096ブロック / 3.7秒** | アドオン導入 |
+| `structure save` → DB | 正確 | 取れる | 64³／回 | 2〜7秒 | **同一PC** |
+| DB直読み | 正確 | 取れる | 無制限 | 約25秒 | **同一PC** |
+| `getchunkdata` | 色のみ | × | 16×16列 | 即座 | なし |
+| `gettopsolidblock` | 正確 | × | 地表1列 | 即座 | なし |
+| `execute if block` | 有無のみ | × | 1座標 | 8ms/本（100並列） | なし |
 
 ---
 
-## 1. `structure save` + DB読み出し（本命）
+## 1. アドオンブリッジ（本命）
+
+### 構成
 
 ```
-/structure save <name> <from> <to> disk
-  → "ストラクチャーを mystructure:<name> という名前で保存しました"
+MCP → /scriptevent mcp:<action> <id> <json>   （既存のWebSocket経由）
+      ↓ アドオンのスクリプトが処理
+MCP ← player.runCommand('say MCPB|<id>|<json>')  → PlayerMessage イベント
 ```
 
-ワールドDBに `structuretemplate_mystructure:<name>` というキーで書かれる。
-**ファイルは作られない**（`.mcstructure` はワールドフォルダのどこにも無い）。
+**ゲーム内からソケットを開く必要が無い。** クライアントには不可能なので、これが要点。
 
-デコード結果（`tools/live-probe/dbstructure.mjs`）：
+### ★`world.sendMessage` は使えない
+
+**3セッションを溶かした落とし穴。**
 
 ```
-### structuretemplate_mystructure:zzf_215417_1  (562 bytes)
-  size: [3,1,3]
-  world origin: [0,-57,-3]
-  palette: diamond_block, air, gold_block, emerald_block, redstone_block
-    +0,0,0  minecraft:diamond_block
-    +1,0,1  minecraft:gold_block
-    +2,0,1  minecraft:redstone_block
+MCPAPI|ping|...              ← world.sendMessage。ゲーム内には出る。WSには乗らない
+[Kai_U] MCPCMD|ping|...      ← player.runCommand('say ...')。WSに乗る
 ```
 
-- リトルエンディアンNBT、非圧縮
-- `block_indices` は2層（2層目は水没レイヤー、未使用は -1）
-- インデックス順は **x → y → z**（サブチャンクとは違う）
-- `structure_world_origin` があるのでワールド座標に戻せる
+`PlayerMessage` は**プレイヤーの発言イベント**。`world.sendMessage` はシステムメッセージなので
+発火しない。最初のブリッジは正常に動作していたが、出力先を間違えていたため
+「スクリプトが動かない」と誤診し続けた。
 
-### ★書き込みは強制される（3回測定）
+`dimension.runCommand` も不可。**`player.runCommand` を使う**（プレイヤーが存在してから）。
 
-| 保存 | DB到達までの遅延 |
+### 確定した設定
+
+| 項目 | 値 |
 |---|---|
-| 1回目 | **2.1秒** |
-| 2回目 | **6.6秒** |
-| 3回目 | **5.2秒** |
+| `@minecraft/server` | **`2.1.0`**（1.7.0〜2.0.0 は全て無応答） |
+| `min_engine_version` | **無関係**（1.18.30 / 1.21.0 の両方で動作） |
+| 出力 | **`player.runCommand('say ...')`** |
 
-保存間隔は16〜21秒あけた。**30秒周期の自動セーブなら少なくとも1回は20秒超になるはずで、ならなかった。**
-つまり `structure save` 自体が書き込みを起こしている。
+### 実測した制限
 
-対して**ブロックを置いただけでは25.4秒**かかった（`setblock` → DB到達、1回測定）。
-この差が本命たる理由。自分の操作結果を確認したいなら `structure save` を挟む。
+| 項目 | 値 |
+|---|---|
+| **1行の長さ** | **481文字は届く。487文字は届かない**（全滅、部分欠落ではない） |
+| 行数 | **200行連続で欠落ゼロ**。行数制限は観測されず |
+| **4096ブロック** | **172行 / 3,706ms / 欠落ゼロ** |
 
-### 制限
+**制限は行数ではなく1行の長さ。** これは好都合で、長い応答は行数を増やせば済む。
+分割器は480文字弱に詰めればよい。
 
-- **1辺64ブロック**（Bedrockの `/structure` の制限）。広域は複数回に分ける
-- 保存のたびにDBキーが増える。`/structure delete` で消せる
-
----
-
-## 2. DB直読み（チャンク単位）
-
-`tools/live-probe/dbchunk.mjs` で **41サブチャンクをデコード、失敗0**。
-
-```
-102350  minecraft:air
- 32805  minecraft:stone
- 16392  minecraft:dirt
-  8192  minecraft:bedrock
-  8184  minecraft:grass_block
-      4  minecraft:gold_block      ← 治具が置いたマーカー
-```
-
-サブチャンク（キーtag 47）の形式：
-
-```
-u8   version         8、または9（9はY indexを自身が持つ）
-u8   storage count   通常1、水没があると2
-u8   y index         version 9のみ
-  ─ storage ごと ─
-u8       (bitsPerBlock << 1) | isRuntime
-u32[]    ブロックインデックス。LSB側から詰め、1個が32bit境界をまたがない
-i32 LE   パレット長
-NBT      その数だけリトルエンディアンcompound {name, states, version}
-```
-
-インデックス順は **x → z → y**（多くの人が想像する順とは逆）。
-
-**ゲーム実行中でも読める。** ただしDBは排他ロックされているので、
-`FileShare.ReadWrite` でコピーしてから開く（スナップショット約60ms、このワールドで107KiB）。
-
-遅延は**約25秒**（自動セーブ待ち）。広域の下見には十分、操作結果の確認には遅すぎる。
-
----
-
-## 3. コマンド経由（別マシンの場合のフォールバック）
-
-### `getchunkdata <dimension> <chunkX> <chunkZ> <height>`
-
-「与えたyより下で最初に見つかるブロック」を16×16=256列ぶん返す。
-
-```
-"S6J9wg*118,Qs3Xww,AAD/ww,0*14,PoRnwg,0*87,cHBwxA,0*13,cHBwyw*3,0*11"
-```
-
-- `*N` は「**あとN個**」。合計は必ず256
-- **6文字base64** = 新規リテラル → 4バイト。**先頭3バイト=描画色、4バイト目=高さ**
-- **`y = バイト値 − 255`**（3点で検証：`c2`→−61、`c7`→−56、`cb`→−52）
-- **素の数値** = 辞書インデックス（そのチャンクでリテラルが初出した順、0起点）
-- `ff 00 ff` 高さ64 = 「見つからなかった」の番兵値
-
-**色はブロックIDではない。** 同じ草でも影が乗ると `4b a2 7d` → `3e 84 67` と変わる。
-**高さは正確、色は目安。**
-
-### `gettopsolidblock <x> <y> <z>`
+### 取れるもの
 
 ```json
-{"blockName":"grass_block","position":{"x":0,"y":-61,"z":-3},"statusCode":0}
+{"ok":true,"name":"minecraft:stone","states":{"stone_type":"stone"},"x":2,"y":-55,"z":-1}
 ```
 
-構造化されており翻訳されない。`getchunkdata` で当たりを付けた地点の確認に。
+**`states` はコマンド経路では取得手段が無かった。**
 
-### `execute if block <x> <y> <z> <block> [states] run <command>`
-
-一致→`statusCode 0`、不一致→負のコード。**散文を返さないので翻訳に強い。**
-
-| 並列数 | 所要 | 1本あたり | 失敗 |
-|---|---|---|---|
-| 直列20本 | 2,243ms | 112ms | 0 |
-| 100本 | **774ms** | **8ms** | **0** |
-
-100本同時でタイムアウト0・エラー0。以前の調査にあった「100本で `TooManyPendingRequests`」は再現せず。
-4,096ブロックの総当たりでも約33秒。
+`getBlock` はチャンク未読み込み時に `undefined` を返す。これは `air` とは**別物**として
+報告する。「何も無い」と「見ていない」を同一視すると、見ていない空間を見たとAIに信じさせる。
 
 ---
 
-## エージェント
+## 2. ワールドDB（フォールバック・広域）
 
-**`agent inspect` はソケットにデータを返さない。** socket-be より手前で生フレームを直接捕捉して確認：
-受信30本すべて `commandResponse`、**捨てられたフレームはゼロ**。
-socket-be 作者の結論は正しかったが、理由は「socket-beが握り潰していた」ではなく
-**そもそも `action:agent` フレームが送られてこない**ため。
+アドオンが導入できない場合と、**チャンク未読み込み領域**を読む場合に使う。
+アドオンはロード済みチャンクしか見えないが、DBは保存済みの全域を持つ。
 
-ただし**コマンドによる**：
+- `structure save` → DB読み出し：**2〜7秒**（`structure save` が書き込みを強制する。実測3回）
+- DB直読み：約25秒（自動セーブ待ち）、範囲無制限
+- **同一PC必須。** 原本はロックされているのでコピーしてから開く（約60ms、107KiB）
 
-| コマンド | 返り値 |
+詳細な形式は [observation-findings.md](observation-findings.md) を参照。
+サブチャンクは x→z→y、構造物は x→y→z。デコーダは `packages/server/src/world/` にあり、
+実機から取ったフィクスチャでCIに入っている。
+
+---
+
+## 3. コマンド経路（アドオン無し・DB到達不可のとき）
+
+`getchunkdata` は高さのみ正確で色は陰影込み。`gettopsolidblock` は地表だけ。
+`execute if block` は候補を当てにいく形。`testforblock` は**日本語化されるので使わない**。
+
+---
+
+## 使えないもの（証拠付き）
+
+| | 理由 |
 |---|---|
-| `agent inspect/detect/inspectdata` | `statusCode` と `statusMessage` のみ |
-| **`agent getposition`** | **`{"position":{...},"y-rot":0}`** |
+| `@minecraft/server-net`（HTTP） | 公式ドキュメント：「**専用サーバでのみ使用可能。ゲームクライアント内では機能しない**」 |
+| `world.sendMessage` | WSの `PlayerMessage` を発火しない（実測） |
+| `agent inspect` の返り値 | `action:agent` フレームがそもそも送られてこない（生フレーム30本すべて `commandResponse`） |
+| `testforblock` のパース | `statusMessage` もブロック名も翻訳される（`ダイヤモンドブロック`） |
 
 ---
 
-## 実装への制約
+## この結論に至るまでに3回同じ誤りをした
 
-1. **`statusCode < 0` は「拒否」ではない。** `0 個のブロックで満たしました`（対象0個の成功）、
-   `そのブロックは設置できません`（既に同じブロック）はどちらも負のコード
-2. **`setblock` は冪等でない。** 同じブロックを2回置くと2回目が負のコードを返す
-3. **DBはコピーしてから開く。** 原本はロックされている
+いずれも「**反応が無い**」を「**機能が無い**」と読んだもの。
+
+1. `agent inspect` — socket-be が握り潰していると疑った。実際はフレームが来ていなかった
+2. チャット購読 — 購読しないまま「返事が無い」と判定していた
+3. `world.sendMessage` — API経路とコマンド経路を同一視していた
+
+**対策：判定は必ず対照を取ってから行う。** 「返事が無い」と言う前に、
+その経路で**返事が来ることを別途確認する**。b4 以降のリグは4系統の独立した信号を出させている。

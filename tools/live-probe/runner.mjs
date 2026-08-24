@@ -89,7 +89,13 @@ function makeSession(world, transcript) {
 
     events: [],
     subscribe() {
-      // socket-be subscribes to what it needs on connect; a rig asking again is a no-op.
+      // socket-be decides its subscriptions from the handlers registered on the server, so a
+      // rig cannot add one mid-session. The runner registers PlayerMessage up front instead
+      // and feeds it here.
+      //
+      // This used to be an empty function next to an events array nobody filled, which meant
+      // a rig asking "did anything come back on chat?" was always answered no. The Script API
+      // bridge test read that as "the pack did not load" when nothing had ever been listening.
     },
   };
 }
@@ -133,6 +139,16 @@ server.network.wss.on('connection', (ws) => {
   });
 });
 
+// Registering a handler is what makes socket-be subscribe to the event at all, so this has
+// to exist before any connection - not because the runner cares about chat, but because a
+// script inside the game has no other way to answer. `world.sendMessage` becomes a
+// PlayerMessage frame on this socket, and that is the whole return path for the Script API
+// bridge.
+let currentSession = null;
+server.on(ServerEvent.PlayerMessage, (event) => {
+  currentSession?.events.push({ t: since(), kind: 'PlayerMessage', event: { message: event.message, sender: event.sender?.name ?? null } });
+});
+
 server.on(ServerEvent.Open, () => log('listening'));
 server.on(ServerEvent.Error, (error) => log('server error:', error?.message ?? error));
 
@@ -159,6 +175,7 @@ server.on(ServerEvent.WorldAdd, async ({ world }) => {
 
     const transcript = [];
     const session = makeSession(world, transcript);
+    currentSession = session;
     const rawFrom = rawFrames.length;
     log(`run ${runNumber} -> ${path.basename(dump)}`);
 
@@ -180,6 +197,7 @@ server.on(ServerEvent.WorldAdd, async ({ world }) => {
     }
 
     fs.writeFileSync(path.join(dump, 'verdicts.json'), JSON.stringify(session.notes, null, 2) + '\n', 'utf8');
+    fs.writeFileSync(path.join(dump, 'events.json'), JSON.stringify(session.events, null, 2) + '\n', 'utf8');
     fs.writeFileSync(path.join(dump, 'transcript.json'), JSON.stringify(transcript, null, 2) + '\n', 'utf8');
 
     // The frames from this run, and separately the ones socket-be would have dropped - which

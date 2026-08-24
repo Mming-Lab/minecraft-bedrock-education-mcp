@@ -1,17 +1,18 @@
 // The first thing to ask a freshly connected game, over the real MCP surface.
 //
 // The add-on was updated to 0.2.0 and the game had to be restarted for it to take effect,
-// because pack folders are only scanned at launch. That claim has been written down twice and
-// checked zero times. This checks it two ways, because the version number alone is a thing the
-// script says about itself:
+// because pack folders are only scanned at launch. bridge_status reports which version is
+// actually running, which is the whole reason it exists.
 //
-//   1. bridge_status reports the version the game is running.
-//   2. A reply is read for its shape. 0.2.0 answers through `tell`, which arrives bare;
-//      0.1.0 and earlier answered through `say`, which arrives wrapped in `[PlayerName]`.
+// What this cannot check is the behaviour the version stands for. 0.2.0 answers through `tell`
+// and earlier builds used `say`, and the difference - a private message rather than one
+// broadcast to a whole classroom - is invisible from up here: `parseLine` strips the
+// `[PlayerName]` that `say` adds, deliberately, so that either works. By the time a reply
+// reaches this code the evidence is gone.
 //
-// The second is the one that matters, because it is the behaviour the version number is
-// standing in for - a private message rather than one broadcast to a whole classroom - and it
-// is observable without trusting the constant.
+// An earlier version of this comment claimed to check it anyway. It did not, and could not.
+// Confirming it needs a second player watching their own chat, or a look at the raw frames -
+// which is what tools/live-probe/runner.mjs is for.
 //
 // Then a short pass over the rest of the reading surface, so a connection that is only good
 // for `ping` does not read as a working one.

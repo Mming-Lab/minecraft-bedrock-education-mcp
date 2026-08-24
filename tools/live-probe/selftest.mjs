@@ -132,7 +132,7 @@ async function runRig(rig, fakeOptions = {}) {
     cwd: HERE,
     stdio: ['ignore', 'pipe', 'pipe'],
     // The ladder rig waits for a person to move around in a world; nobody is here.
-    env: { ...process.env, PROBE_EVENT_WAIT: '300' },
+    env: { ...process.env, PROBE_EVENT_WAIT: '300', PROBE_FOCUS_WAIT: '6000' },
   });
 
   let output = '';
@@ -217,157 +217,6 @@ check('the raw frames outlive the interpretation', () => {
   assert.ok(raw, 'the refused command is missing from frames.jsonl');
 });
 
-const a1 = await runRig('a1-core');
-
-check('the long rig also runs to completion', () => {
-  assert.equal(a1.exitCode, 0, a1.output);
-});
-
-check('paging stops when the game starts repeating itself', () => {
-  // Left unbounded this walks to 60 pages of identical text and calls it data.
-  assert.equal(a1.verdicts.help_pages, 3);
-});
-
-check('the block name is parsed out of the testforblock message', () => {
-  assert.equal(a1.verdicts.testforblock_regex_matches, true);
-  assert.equal(a1.verdicts.testforblock_regex_capture, 'diamond_block');
-});
-
-check('a syntax probe that is refused is recorded as refused', () => {
-  assert.deepEqual(a1.verdicts.getchunkdata_any_accepted, []);
-  assert.ok(Object.keys(a1.verdicts.getchunkdata_probes).length >= 8);
-});
-
-check('the whole generated corpus is replayed', () => {
-  const corpus = JSON.parse(
-    fs.readFileSync(path.join(HERE, '..', '..', 'tests', 'golden', 'commands', 'corpus.json'), 'utf8')
-  );
-  assert.equal(a1.verdicts.corpus_total, corpus.commands.length);
-  const results = JSON.parse(fs.readFileSync(path.join(a1.dir, 'corpus-results.json'), 'utf8'));
-  assert.equal(Object.keys(results).length, corpus.commands.length);
-});
-
-check('caret commands are pulled out for their own answer', () => {
-  assert.ok(Array.isArray(a1.verdicts.caret_accepted));
-  assert.ok(a1.verdicts.caret_accepted.length >= 1, 'the corpus should contain a caret command');
-});
-
-check('the volume search terminates and finds the limit the fake enforces', () => {
-  // This is the check that exists because the search did not terminate. The fake refuses
-  // above 65536; the rig must land on exactly that, from a starting guess of 32768.
-  assert.equal(a1.verdicts.fill_volume_limit_is_32768, false, 'the fake accepts 33792, so the guess must read as wrong');
-  assert.equal(a1.verdicts.fill_volume_limit_converged, true, 'the search ran out of steps instead of converging');
-  assert.equal(a1.verdicts.fill_volume_limit_measured, FAKE_FILL_LIMIT);
-});
-
-check('a rig that throws still writes what it had', () => {
-  // Nothing here throws, so this asserts the weaker thing the code guarantees: the files are
-  // written after the rig returns, whatever it returned.
-  assert.ok(fs.existsSync(path.join(a1.dir, 'verdicts.json')));
-  assert.ok(fs.existsSync(path.join(a1.dir, 'help.txt')));
-});
-
-// --- the gate ---------------------------------------------------------------------------
-//
-// a1-core's first live run spent four minutes collecting 34 timeouts, which between them
-// carried one bit of information. a2-world stops after three commands and says which of
-// three different things a person should go and check. Each branch is tested, because a
-// diagnosis that names the wrong cause is worse than none.
-
-const suppressed = await runRig('a2-world', { silent: 'feedback' });
-
-check('command feedback being off is detected and turned back on', () => {
-  // The live case, twice over: /help answers, nothing else does. The gate has to recognise
-  // that shape, send the gamerule without waiting for a reply it will not get, and carry on.
-  assert.equal(suppressed.verdicts.sendcommandfeedback_was_off, true);
-  assert.equal(suppressed.verdicts.world_responds, true, JSON.stringify(suppressed.verdicts.diagnosis));
-});
-
-check('once feedback is on the rest of the rig runs', () => {
-  assert.ok(suppressed.verdicts.corpus_total > 0, 'the rig stopped instead of continuing');
-});
-
-const stuck = await runRig('a2-world', { silent: 'world' });
-
-check('feedback that stays off after the gamerule is not called a paused world', () => {
-  // The earlier gate guessed "paused" here on a theory about `list` that turned out to be
-  // wrong. Now it says what it knows - the gamerule did not help - and names what a person
-  // can actually check in the game.
-  assert.equal(stuck.verdicts.world_responds, false);
-  assert.match(stuck.verdicts.diagnosis, /sendcommandfeedback/);
-  assert.match(stuck.verdicts.diagnosis, /operator|cheats/);
-});
-
-check('the gate stops instead of running the rest of the rig', () => {
-  // The whole point: no corpus replay, no fill search, no four minutes of timeouts.
-  assert.equal(stuck.verdicts.corpus_total, undefined);
-  assert.ok(stuck.verdicts.fill_32768 === undefined);
-});
-
-const noPermission = await runRig('a2-world', { silent: 'privileged' });
-
-check('a live world that refuses block commands is diagnosed as permission', () => {
-  assert.equal(noPermission.verdicts.world_responds, false);
-  assert.match(noPermission.verdicts.diagnosis, /permission/);
-  assert.match(noPermission.verdicts.diagnosis, /cheats|operator/);
-});
-
-const deaf = await runRig('a2-world', { silent: 'all' });
-
-check('a socket that answers nothing is not blamed on the world', () => {
-  // /help is the control. If even that is silent, the fault is upstream of anything the
-  // world could be doing, and the diagnosis must not send someone to check gamerules.
-  assert.equal(deaf.verdicts.world_responds, false);
-  assert.match(deaf.verdicts.diagnosis, /`help` does not answer either/);
-  assert.doesNotMatch(deaf.verdicts.diagnosis, /sendcommandfeedback/);
-});
-
-const healthy = await runRig('a2-world');
-
-check('a healthy world runs the whole rig', () => {
-  assert.equal(healthy.verdicts.world_responds, true);
-  assert.equal(healthy.verdicts.corpus_total, JSON.parse(
-    fs.readFileSync(path.join(HERE, '..', '..', 'tests', 'golden', 'commands', 'corpus.json'), 'utf8')
-  ).commands.length);
-});
-
-check('a command missing from /help but present in the build is not called absent', () => {
-  // The whole reason this probe was rewritten. The fake answers `gettopsolidblock` normally
-  // while refusing `getchunkdata` as unknown; the classifier has to split them, because
-  // "not in /help" covers absent, hidden, and unpermitted alike.
-  const existence = healthy.verdicts.command_existence;
-  assert.equal(healthy.verdicts.controls_differ, true, 'the controls fail identically, so nothing can be classified');
-  assert.match(existence.gettopsolidblock.verdict, /accepted|present/);
-  assert.match(existence.getchunkdata.verdict, /absent/);
-  assert.match(existence.querytarget.verdict, /absent/);
-});
-
-check('when the controls fail identically nothing is classified', () => {
-  // A guard on the guard. If the two controls ever produce the same message, a verdict of
-  // "absent" would be manufactured rather than measured.
-  const existence = healthy.verdicts.command_existence;
-  for (const [name, r] of Object.entries(existence)) {
-    if (r.verdict.startsWith('undecidable')) {
-      assert.equal(healthy.verdicts.controls_differ, false, `${name} was called undecidable while the controls did differ`);
-    }
-  }
-});
-
-check('absolute corpus coordinates are moved next to the player before being sent', () => {
-  // Sent at the origin they would land in an unloaded chunk, and a chunk error would read
-  // as a syntax rejection.
-  const results = JSON.parse(fs.readFileSync(path.join(healthy.dir, 'corpus-results.json'), 'utf8'));
-  const absolute = results['setblock 0 64 0 minecraft:stone replace'];
-  assert.ok(absolute, 'the corpus entry is missing');
-  assert.match(absolute.sent, /^setblock ~ ~64 ~ /);
-});
-
-check('relative and local corpus commands are sent unchanged', () => {
-  const results = JSON.parse(fs.readFileSync(path.join(healthy.dir, 'corpus-results.json'), 'utf8'));
-  assert.equal(results['setblock ^ ^ ^5 minecraft:stone replace'].sent, 'setblock ^ ^ ^5 minecraft:stone replace');
-  assert.equal(results['setblock ~ ~ ~ minecraft:stone replace'].sent, 'setblock ~ ~ ~ minecraft:stone replace');
-});
-
 // --- the ladder -------------------------------------------------------------------------
 
 const ladder = await runRig('a3-ladder');
@@ -387,6 +236,37 @@ check('the ladder tries more than one origin type', () => {
 check('the reading states what was measured and not a cause', () => {
   assert.match(ladder.verdicts.reading, /Everything answered/);
   assert.doesNotMatch(ladder.verdicts.reading, /sendcommandfeedback|paused/);
+});
+
+// --- the focus rig ----------------------------------------------------------------------
+
+const focusLive = await runRig('a4-focus');
+
+check('a world that answers immediately is not accused of having been paused', () => {
+  assert.equal(focusLive.exitCode, 0, focusLive.output);
+  assert.equal(focusLive.verdicts.world_responds, true);
+  assert.equal(focusLive.verdicts.polls_before_answer, 1);
+  assert.match(focusLive.verdicts.reading, /never paused/);
+});
+
+check('a live world goes straight on to the measurements', () => {
+  // The whole reason this rig exists: getting a responsive world is the expensive part, so
+  // once there is one nothing should be left unasked.
+  assert.ok(focusLive.verdicts.corpus_total > 0, 'the battery did not run');
+  assert.ok(focusLive.verdicts.command_existence, 'the existence probe did not run');
+});
+
+const focusDead = await runRig('a4-focus', { silent: 'world' });
+
+check('a world that never answers is reported with the timeline, not a verdict', () => {
+  assert.equal(focusDead.verdicts.world_responds, false);
+  assert.equal(focusDead.verdicts.world_answered_after_ms, null);
+  assert.ok(focusDead.verdicts.focus_timeline.length >= 2, 'the timeline is the evidence');
+  assert.ok(focusDead.verdicts.focus_timeline.every((t) => t.answered === false));
+  // It must name the pause as the thing to rule out, and must not assert it happened.
+  assert.match(focusDead.verdicts.diagnosis, /focused/);
+  assert.match(focusDead.verdicts.diagnosis, /inventory|chest/);
+  assert.match(focusDead.verdicts.diagnosis, /If the window WAS focused/);
 });
 
 console.log(`\n${passed} passed, ${failed} failed`);

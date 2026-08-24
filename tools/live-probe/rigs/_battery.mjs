@@ -1,20 +1,8 @@
-// A-2: the world-facing questions, with a gate in front of them.
+// The measurements themselves, split out so more than one rig can run them.
 //
-//   node probe.mjs --rig a2-world
-//
-// The first run of a1-core connected, answered 48 help requests, and then got silence from
-// all 34 commands that touch the world - four minutes of timeouts producing one bit of
-// information. This rig spends three commands establishing whether the world is answering at
-// all, and stops with a diagnosis if it is not.
-//
-// The ladder is chosen so each rung fails for a different reason:
-//
-//   list      needs the session, not the world      - if this is silent, the socket is wrong
-//   say       needs the world to be running         - if only this is silent, it is paused
-//   setblock  needs the world AND permission        - if only this is silent, it is cheats/op
-//
-// Coordinates are relative throughout. `querytarget` does not exist in this build, so there
-// is no way to ask where the player is; `~` sidesteps needing to know.
+// a2-world reaches these through its own gate; a4-focus reaches them the moment it sees the
+// world answer. Neither should own them, because the expensive part of a live session is
+// getting a world that responds - once there is one, every question should be asked.
 
 import fs from 'node:fs';
 import path from 'node:path';
@@ -28,80 +16,8 @@ const status = (r) => ({
   timedOut: !!r.timedOut,
 });
 const accepted = (r) => !r.timedOut && (r.body?.statusCode ?? -1) >= 0;
-const answered = (r) => !r.timedOut;
 
-export async function run(session, { log, dump }) {
-  // ---------------------------------------------------------------------------------------
-  log('gate: is anything on the other end actually running?');
-  // ---------------------------------------------------------------------------------------
-
-  // `/help` is the control, because it is the one command observed to answer. It is answered
-  // from the client's own command table, so it needs the socket and the command pipeline and
-  // nothing else. Every other reply in this protocol is *command feedback*.
-  //
-  // That distinction is the whole diagnosis. Two sessions running a2-world's predecessor got
-  // 48 help replies and then silence from all 34 commands that follow - not errors, silence.
-  // The first gate written for this guessed a paused world, on the theory that `list` is
-  // answered by the session; it is not, and `list` was silent too.
-  //
-  // `sendcommandfeedback` is a gamerule that suppresses command feedback. With it off, a
-  // command executes normally and says nothing - which over a socket is indistinguishable
-  // from a command that never ran. Education worlds do not always ship with it on.
-  //
-  // So the gate tries it rather than guessing further: turn the gamerule on, retry. If the
-  // silence lifts, that was the cause and the rig continues. Nothing else can be concluded
-  // without doing this first, because until feedback is on, every probe reads as a timeout.
-
-  const rungs = {
-    help: await session.command('help 1', { timeout: 6000 }),
-    say: await session.command('say probe: liveness check', { timeout: 6000 }),
-  };
-
-  if (!answered(rungs.help)) {
-    session.note('gate_help', status(rungs.help));
-    session.note('world_responds', false);
-    session.note('diagnosis', '`help` does not answer either. Nothing on the other end is processing commands at all - this is the socket or the session, not the world.');
-    log('');
-    log('STOPPING: not even /help answers.');
-    return;
-  }
-
-  if (!answered(rungs.say)) {
-    log('  /help answers and /say does not - trying the sendcommandfeedback gamerule');
-    // Sent without waiting for a reply, because if the diagnosis is right there will not be
-    // one: the command that turns feedback on is itself silent while feedback is off.
-    session.send({
-      header: { version: 1, requestId: crypto.randomUUID(), messagePurpose: 'commandRequest', messageType: 'commandRequest' },
-      body: { origin: { type: 'player' }, commandLine: 'gamerule sendcommandfeedback true', version: 1 },
-    });
-    await session.wait(1500);
-    rungs.sayAfterGamerule = await session.command('say probe: liveness check, take two', { timeout: 6000 });
-    session.note('sendcommandfeedback_was_off', answered(rungs.sayAfterGamerule));
-  }
-
-  rungs.setblock = await session.command('setblock ~ ~-3 ~ minecraft:gold_block replace', { timeout: 6000 });
-
-  for (const [name, reply] of Object.entries(rungs)) {
-    session.note(`gate_${name}`, status(reply));
-  }
-
-  if (!answered(rungs.setblock)) {
-    let diagnosis;
-    if (!answered(rungs.say) && !answered(rungs.sayAfterGamerule ?? { timedOut: true })) {
-      diagnosis = '`help` answers, `say` does not, and turning sendcommandfeedback on did not change that. Either the player cannot set gamerules (not an operator / cheats off for this world), or something else is swallowing command feedback. Check in the game: does typing `/say hi` in chat print anything?';
-    } else {
-      diagnosis = '`say` answers but `setblock` does not: commands run and report, so this is specific to changing blocks. Check that cheats are enabled and, in Education, that the player has worldbuilder permission (`/worldbuilder`) and the area is not protected.';
-    }
-    session.note('world_responds', false);
-    session.note('diagnosis', diagnosis);
-    log('');
-    log('STOPPING: ' + diagnosis);
-    return;
-  }
-
-  session.note('world_responds', true);
-  session.note('setblock_relative_works', accepted(rungs.setblock));
-
+export async function runBattery(session, { log, dump }) {
   // ---------------------------------------------------------------------------------------
   log('phase 1: testforblock - does it name the block it found?');
   // ---------------------------------------------------------------------------------------

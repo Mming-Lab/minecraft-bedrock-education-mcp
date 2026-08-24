@@ -39,6 +39,18 @@ const DUMP_ROOT = path.join(HERE, args.get('dump-root') ?? 'dump');
 // needs the opposite.
 const ONCE = args.get('once') === 'true';
 
+/**
+ * The command grammar generation to ask for, matching socket-be's default.
+ *
+ * socket-be sends `MinecraftCommandVersion.LocateStructureOutput`, which is 42, and there is
+ * a status code named CommandVersionMismatch, so the field means something. The documented
+ * examples all say 1, which is `Initial`; that is what this probe sent for its first three
+ * sessions. Running socket-be against the same world showed the frame format was not what
+ * was breaking those sessions - the world was paused - but there is no reason to keep asking
+ * for the 2016 grammar when the working client asks for the current one.
+ */
+const COMMAND_VERSION = 42;
+
 const startedAt = Date.now();
 const since = () => Date.now() - startedAt;
 
@@ -71,16 +83,15 @@ class Session {
    * Resolves rather than rejects on a command the game refuses: a refusal is data here, and
    * the rigs are mostly asking which commands get refused.
    */
-  command(commandLine, { timeout = 8000 } = {}) {
+  command(commandLine, { timeout = 8000, commandVersion = COMMAND_VERSION } = {}) {
     const requestId = randomUUID();
     const frame = {
       header: {
         version: 1,
         requestId,
         messagePurpose: 'commandRequest',
-        messageType: 'commandRequest',
       },
-      body: { origin: { type: 'player' }, commandLine, version: 1 },
+      body: { commandLine, version: commandVersion },
     };
 
     return new Promise((resolve) => {
@@ -122,7 +133,6 @@ class Session {
         version: 1,
         requestId: randomUUID(),
         messagePurpose: 'subscribe',
-        messageType: 'commandRequest',
       },
       body: { eventName },
     });
@@ -134,7 +144,6 @@ class Session {
         version: 1,
         requestId: randomUUID(),
         messagePurpose: 'unsubscribe',
-        messageType: 'commandRequest',
       },
       body: { eventName },
     });
@@ -236,8 +245,16 @@ wss.on('connection', async (socket) => {
   // message, so the fix is a `/connect out` that nobody knows to type. Now the file is
   // re-read on every connection and the name comes from active-rig.txt if it exists, so a
   // rig can be edited or swapped while the game stays connected to the same server.
+  // An explicit --rig wins. active-rig.txt is the convenience for a server left running
+  // while rigs are edited; letting it override the flag meant the self-test asked for three
+  // different rigs and silently ran the same one three times, which showed up as six
+  // unrelated-looking failures.
   const rigFile = path.join(HERE, 'active-rig.txt');
-  const rigName = fs.existsSync(rigFile) ? fs.readFileSync(rigFile, 'utf8').trim() : RIG;
+  const rigName = args.has('rig')
+    ? RIG
+    : fs.existsSync(rigFile)
+      ? fs.readFileSync(rigFile, 'utf8').trim()
+      : RIG;
 
   let rig;
   try {

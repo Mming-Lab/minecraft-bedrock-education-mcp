@@ -86,6 +86,50 @@ try {
     }
   });
 
+  await test('no array parameter arrives without an item schema', async () => {
+    // An array declared with no `items` becomes an unconstrained list, and every rule
+    // inside it stops applying. The previous server had five of these - the `steps` array
+    // on four tools plus `player.can_destroy` and `can_place_on` - which is how a step
+    // could carry `distance: 1000000` past a schema that capped it at 10.
+    for (const tool of tools) {
+      for (const [key, property] of Object.entries(tool.inputSchema.properties ?? {})) {
+        if (property.type !== 'array') continue;
+        assert.ok(
+          property.items && Object.keys(property.items).length > 0,
+          `${tool.name}.${key} is an array with no item schema`
+        );
+      }
+    }
+  });
+
+  await test('no parameter arrives unconstrained', async () => {
+    for (const tool of tools) {
+      for (const [key, property] of Object.entries(tool.inputSchema.properties ?? {})) {
+        const constrained =
+          property.type !== undefined ||
+          property.enum !== undefined ||
+          property.anyOf !== undefined ||
+          property.oneOf !== undefined ||
+          property.$ref !== undefined;
+        assert.ok(constrained, `${tool.name}.${key} arrived with no type at all`);
+      }
+    }
+  });
+
+  await test('a description that names another tool names one that is registered', async () => {
+    // The previous server's `sequence` advertised eight actions belonging to other tools and
+    // not one of them existed, so every step the model built from that description failed.
+    const names = new Set(tools.map((t) => t.name));
+    for (const tool of tools) {
+      for (const match of tool.description.matchAll(/\b([a-z][a-z0-9]*\.[a-z][a-z0-9_]*)\b/g)) {
+        assert.ok(
+          names.has(match[1]),
+          `${tool.name} points at "${match[1]}", which is not registered`
+        );
+      }
+    }
+  });
+
   await test('the tool list is in a stable order', async () => {
     const again = await client.listTools();
     assert.deepEqual(

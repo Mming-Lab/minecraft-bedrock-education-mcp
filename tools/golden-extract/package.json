@@ -10,6 +10,8 @@
   "scripts": {
     "build": "node build.mjs",
     "extract": "node build.mjs && node extract.mjs",
-    "validate:legacy": "node validate.mjs --geometry ./dist-legacy/utils/geometry/index.js --math ./dist-legacy/utils/math/index.js --optimizer ./dist-legacy/utils/block-optimizer.js"
+    "validate:legacy": "node validate.mjs --geometry ./dist-legacy/utils/geometry/index.js --math ./dist-legacy/utils/math/index.js --optimizer ./dist-legacy/utils/block-optimizer.js",
+    "selftest": "node selftest.mjs",
+    "audit": "node dump-schemas.mjs"
   }
 }

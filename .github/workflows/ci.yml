@@ -1,0 +1,125 @@
+name: CI
+
+on:
+  push:
+    branches: ['**']
+  pull_request:
+
+jobs:
+  server:
+    name: server (node ${{ matrix.node }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # 22 is the oldest release still supported; 24 is the current LTS.
+        node: [22, 24]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+
+      - name: Install
+        working-directory: packages/server
+        run: npm ci
+
+      - name: Build
+        working-directory: packages/server
+        run: npm run build
+
+      # Checks the tool definitions directly: names, output schemas, whether each
+      # description says when not to use the tool, whether cross-references resolve.
+      - name: Tool surface
+        working-directory: packages/server
+        run: node test/tools.test.mjs
+
+      # Spawns the built server and drives it with a real MCP client. A schema the SDK
+      # rejects or a result that fails output validation passes the step above and fails
+      # here, which is the point of running both.
+      - name: Server over stdio
+        working-directory: packages/server
+        run: node test/server.test.mjs
+
+  goldens:
+    name: geometry goldens
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      - name: Install the extractor
+        working-directory: tools/golden-extract
+        run: npm ci
+
+      - name: Install the server
+        working-directory: packages/server
+        run: npm ci
+
+      - name: Build the server
+        working-directory: packages/server
+        run: npm run build
+
+      # Recompiles the legacy sources and regenerates the goldens. build.mjs fails if tsc
+      # reports anything but the three known errors, so a change to the legacy code cannot
+      # silently shift the baseline the rewrite is measured against.
+      - name: Regenerate the goldens
+        working-directory: tools/golden-extract
+        run: npm run extract
+
+      - name: Goldens unchanged
+        run: |
+          if ! git diff --quiet -- tests/golden; then
+            echo "Regenerating the goldens changed them. The legacy sources or the case"
+            echo "matrix moved; commit the regenerated files if that was intended."
+            git diff --stat -- tests/golden
+            exit 1
+          fi
+
+      # The gate on the gate: running the suite against the legacy implementation must fail,
+      # on exactly the cases whose verdict says the rewrite has to diverge. It also refuses
+      # any case whose recorded output violates an invariant but is marked `equivalent` -
+      # that is how a defect gets written down as correct behaviour.
+      - name: Golden suite self-test
+        working-directory: tools/golden-extract
+        run: npm run selftest
+
+      - name: Rewrite against the goldens
+        working-directory: packages/server
+        run: npm run test:golden
+
+  audit:
+    name: legacy tool surface
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      - name: Install
+        working-directory: tools/golden-extract
+        run: npm ci
+
+      # Reads the legacy tool schemas from the syntax tree - the classes cannot be imported,
+      # since BaseTool depends on socket-be. Records where the descriptions and the code
+      # disagree; informational while the rewrite is in progress.
+      - name: Audit
+        working-directory: tools/golden-extract
+        run: npm run audit
+
+      - name: Audit report unchanged
+        run: |
+          if ! git diff --quiet -- tests/golden/schemas; then
+            echo "The legacy tool surface changed. Commit the regenerated report."
+            git diff --stat -- tests/golden/schemas
+            exit 1
+          fi

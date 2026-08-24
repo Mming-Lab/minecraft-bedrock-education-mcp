@@ -38,8 +38,10 @@ it violates none of the invariants, and queues everything else for a written jud
 
 ```bash
 npm install
-npm run extract            # regenerate tests/golden/ from src/utils/
-npm run validate:legacy    # self-test: must FAIL on the bug-fixed cases
+npm run extract     # regenerate tests/golden/ from src/utils/
+npm run selftest    # check the suite still guards what it claims to
+npm run audit       # record the legacy tool surface
+npm run validate:legacy   # the raw run selftest wraps
 ```
 
 `validate:legacy` pointing at the legacy code is the suite's own test. The **17 failures**
@@ -58,6 +60,22 @@ node validate.mjs --geometry ../../dist/utils/geometry/index.js \
                   --math     ../../dist/utils/math/index.js \
                   --optimizer ../../dist/utils/block-optimizer.js
 ```
+
+## The self-test
+
+`npm run selftest` is the gate on the gate, and it checks two different things.
+
+The first is that running the suite against the legacy implementation fails on exactly the
+cases whose verdict says the rewrite must diverge - no more, no fewer, and the same case
+names.
+
+The second is the one that matters, because the first is circular: it compares the verdicts
+against a run driven by those same verdicts, so downgrading a `bug-fixed` to `equivalent`
+moves both sides together and passes. It did, the first time this was written. So the
+second check ignores the verdicts entirely and reads the *measured* legacy output: a case
+whose recorded output violates an invariant may never be marked `equivalent`, because
+`equivalent` is the instruction to reproduce it exactly. That is how a defect gets written
+down as correct behaviour, and no edit to verdicts.json can make it look fine.
 
 ## Invariants
 

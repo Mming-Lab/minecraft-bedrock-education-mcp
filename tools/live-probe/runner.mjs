@@ -110,6 +110,29 @@ console.log('');
 console.log(`      /connect localhost:${PORT}`);
 console.log('');
 
+// Everything the game sends, including what socket-be throws away.
+//
+// socket-be checks `messagePurpose` against a list and drops anything not on it, printing
+// `[Network] Invalid message purpose:`. `action:agent` is not on that list, which is why its
+// author concluded the agent inspection commands return no data - the data may well have
+// arrived and been discarded before any handler saw it. That is the one thing this runner
+// would otherwise inherit from the library it is built on.
+//
+// A second listener on the same socket sees the frames first-hand. It only works because
+// encryption is off; with it on these would be ciphertext and this would have to go through
+// socket-be's own decryption.
+const rawFrames = [];
+server.network.wss.on('connection', (ws) => {
+  ws.on('message', (data) => {
+    const text = data.toString();
+    try {
+      rawFrames.push({ t: since(), frame: JSON.parse(text) });
+    } catch {
+      rawFrames.push({ t: since(), raw: text, parseError: true });
+    }
+  });
+});
+
 server.on(ServerEvent.Open, () => log('listening'));
 server.on(ServerEvent.Error, (error) => log('server error:', error?.message ?? error));
 
@@ -136,6 +159,7 @@ server.on(ServerEvent.WorldAdd, async ({ world }) => {
 
     const transcript = [];
     const session = makeSession(world, transcript);
+    const rawFrom = rawFrames.length;
     log(`run ${runNumber} -> ${path.basename(dump)}`);
 
     const rigName = args.has('rig')
@@ -157,6 +181,18 @@ server.on(ServerEvent.WorldAdd, async ({ world }) => {
 
     fs.writeFileSync(path.join(dump, 'verdicts.json'), JSON.stringify(session.notes, null, 2) + '\n', 'utf8');
     fs.writeFileSync(path.join(dump, 'transcript.json'), JSON.stringify(transcript, null, 2) + '\n', 'utf8');
+
+    // The frames from this run, and separately the ones socket-be would have dropped - which
+    // is the whole reason the second listener exists, so it is worth not having to grep for.
+    const mine = rawFrames.slice(rawFrom);
+    const KNOWN = new Set(['commandResponse', 'event', 'error', 'ws:encrypt', 'commandRequest', 'subscribe', 'unsubscribe']);
+    const unknown = mine.filter((f) => f.frame && !KNOWN.has(f.frame.header?.messagePurpose));
+    fs.writeFileSync(path.join(dump, 'raw-frames.jsonl'), mine.map((f) => JSON.stringify(f)).join('\n') + '\n', 'utf8');
+    if (unknown.length) {
+      fs.writeFileSync(path.join(dump, 'unrecognised-frames.json'), JSON.stringify(unknown, null, 2) + '\n', 'utf8');
+      log(`${unknown.length} frames with a purpose socket-be does not handle -> unrecognised-frames.json`);
+      for (const p of new Set(unknown.map((f) => f.frame.header?.messagePurpose))) log(`   ${p}`);
+    }
     fs.writeFileSync(
       path.join(dump, 'meta.json'),
       JSON.stringify({ rig: rigName, port: PORT, world: n, run: runNumber, startedAt: stamp, transport: 'socket-be' }, null, 2) + '\n',

@@ -5,6 +5,8 @@
   "type": "module",
   "description": "Records what Minecraft actually sends, so the design stops guessing.",
   "dependencies": {
+    "leveldb-zlib": "^1.2.0",
+    "prismarine-nbt": "^2.8.0",
     "socket-be": "^2.6.0",
     "ws": "^8.18.0"
   },

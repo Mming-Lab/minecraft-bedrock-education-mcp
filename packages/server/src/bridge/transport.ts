@@ -243,6 +243,7 @@ export class SocketBridgeTransport implements BridgeTransport, CommandRunner {
         commandLine,
         statusCode: typeof result.statusCode === 'number' ? result.statusCode : 0,
         statusMessage: typeof result.statusMessage === 'string' ? result.statusMessage : '',
+        data: result as Readonly<Record<string, unknown>>,
       };
     } catch (error) {
       throw new BridgeTransportError(

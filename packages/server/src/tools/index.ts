@@ -2,10 +2,12 @@ export * from './types.js';
 export * from './build.js';
 export * from './world.js';
 export * from './layers.js';
+export * from './players.js';
 
 import { buildTools } from './build.js';
 import { offlineBridge, worldTools, type WorldBridge } from './world.js';
 import { layerTools } from './layers.js';
+import { playerTools } from './players.js';
 import { BuildOutcome, type AnyToolDefinition, type PlannedBuild } from './types.js';
 import { placeBlocks } from '../execute/placer.js';
 import type { CommandRunner } from '../bridge/index.js';
@@ -69,6 +71,9 @@ export function toolsFor(bridge: WorldBridge, runner: CommandRunner = offlineRun
   return [
     ...buildTools.map((tool) => building(tool as AnyToolDefinition, runner)),
     ...layerTools(runner),
+    // Where the players are comes before what is around them: it is the only reading tool that
+    // needs no coordinates, and every other one needs coordinates.
+    ...playerTools(runner),
     ...worldTools(bridge),
   ];
 }

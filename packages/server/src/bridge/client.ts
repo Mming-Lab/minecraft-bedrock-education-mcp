@@ -42,6 +42,18 @@ export interface CommandOutcome {
    */
   readonly statusCode: number;
   readonly statusMessage: string;
+  /**
+   * The rest of what the game sent back.
+   *
+   * Most commands answer with nothing but a code and a message, but some carry the actual
+   * answer in a field of their own - `querytarget` puts a JSON array in `details`, and it is
+   * the only route to where anybody is standing. Dropping everything but the two common
+   * fields threw that away.
+   *
+   * Left as the raw record rather than typed per command: what a command returns is the
+   * game's business, and a caller that wants `details` knows it asked for `querytarget`.
+   */
+  readonly data: Readonly<Record<string, unknown>>;
 }
 
 /**

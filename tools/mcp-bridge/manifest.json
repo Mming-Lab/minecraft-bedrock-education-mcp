@@ -1,13 +1,13 @@
 {
   "format_version": 2,
   "header": {
-    "name": "MCP Bridge (probe)",
-    "description": "Answers scriptevent requests over chat, so the MCP server can read the world through the Script API instead of through commands or the world file.",
+    "name": "MCP Bridge",
+    "description": "Answers scriptevent requests over chat, so the MCP server can read the world through the Script API.",
     "uuid": "b7a1c3d4-5e6f-4a8b-9c0d-1e2f3a4b5c60",
     "version": [
       0,
-      0,
-      1
+      2,
+      0
     ],
     "min_engine_version": [
       1,
@@ -22,8 +22,8 @@
       "uuid": "b7a1c3d4-5e6f-4a8b-9c0d-1e2f3a4b5c61",
       "version": [
         0,
-        0,
-        1
+        2,
+        0
       ],
       "entry": "scripts/main.js"
     }

@@ -1,1 +1,1 @@
-c2-hud
+d2-channel

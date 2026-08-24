@@ -77,3 +77,6 @@ CLAUDE.md
 
 # Documentation (development only)
 doc/
+
+# Copies of dist that live-probe rigs import, to dodge the ESM module cache.
+packages/server/.rig-cache/

@@ -1,0 +1,890 @@
+diff --git a/src/entity/agent.ts b/src/entity/agent.ts
+index e00b415..62d0e42 100644
+--- a/src/entity/agent.ts
++++ b/src/entity/agent.ts
+@@ -1,5 +1,6 @@
+ import type  { Vector3 } from '@minecraft/server';
+ import type { World } from '../world';
++import type { AgentActionResult } from '../types';
+ import { CommandStatusCode, type AgentDirection } from '../enums';
+ 
+ /**
+@@ -68,24 +69,37 @@ export class Agent {
+     if (res.statusCode < CommandStatusCode.Success) throw new Error(res.statusMessage);
+   }
+ 
+-  public async inspect(direction: AgentDirection): Promise<void> {
+-    const res = await this.world.runCommand(`agent inspect ${direction}`);
+-    if (res.statusCode < CommandStatusCode.Success) throw new Error(res.statusMessage);
++  /**
++   * Reports the block the agent is facing in the specified direction.
++   *
++   * @remarks
++   * The payload lands in {@link AgentActionResult.body}. Its field names are not documented
++   * by Mojang and are not asserted here; read `body` to discover them, or pass a type
++   * argument once you have confirmed the shape against a live client.
++   */
++  public async inspect(direction: AgentDirection): Promise<AgentActionResult> {
++    return await this.world.runAgentCommand(`agent inspect ${direction}`);
+   }
+ 
+-  public async inspectData(direction: AgentDirection): Promise<void> {
+-    const res = await this.world.runCommand(`agent inspectdata ${direction}`);
+-    if (res.statusCode < CommandStatusCode.Success) throw new Error(res.statusMessage);
++  /**
++   * Reports the block data value of the block the agent is facing.
++   */
++  public async inspectData(direction: AgentDirection): Promise<AgentActionResult> {
++    return await this.world.runAgentCommand(`agent inspectdata ${direction}`);
+   }
+ 
+-  public async detect(direction: AgentDirection): Promise<void> {
+-    const res = await this.world.runCommand(`agent detect ${direction}`);
+-    if (res.statusCode < CommandStatusCode.Success) throw new Error(res.statusMessage);
++  /**
++   * Reports whether a collidable block is present in the specified direction.
++   */
++  public async detect(direction: AgentDirection): Promise<AgentActionResult> {
++    return await this.world.runAgentCommand(`agent detect ${direction}`);
+   }
+ 
+-  public async detectRedstone(direction: AgentDirection): Promise<void> {
+-    const res = await this.world.runCommand(`agent detectredstone ${direction}`);
+-    if (res.statusCode < CommandStatusCode.Success) throw new Error(res.statusMessage);
++  /**
++   * Reports whether a redstone signal is present in the specified direction.
++   */
++  public async detectRedstone(direction: AgentDirection): Promise<AgentActionResult> {
++    return await this.world.runAgentCommand(`agent detectredstone ${direction}`);
+   }
+ 
+   /**
+@@ -141,22 +155,28 @@ export class Agent {
+     if (res.statusCode < CommandStatusCode.Success) throw new Error(res.statusMessage);
+   }
+ 
+-  public async getItemCount(slot: number): Promise<void> {
+-    // Sadly this command does not return any data
+-    const res = await this.world.runCommand(`agent getitemcount ${slot}`);
+-    if (res.statusCode < CommandStatusCode.Success) throw new Error(res.statusMessage);
++  /**
++   * Reports the number of items in the specified slot.
++   * @param slot **one**-based index of the slot in the agent's inventory
++   */
++  public async getItemCount(slot: number): Promise<AgentActionResult> {
++    return await this.world.runAgentCommand(`agent getitemcount ${slot}`);
+   }
+ 
+-  public async getItemSpace(slot: number): Promise<void> {
+-    // Sadly this command does not return any data
+-    const res = await this.world.runCommand(`agent getitemspace ${slot}`);
+-    if (res.statusCode < CommandStatusCode.Success) throw new Error(res.statusMessage);
++  /**
++   * Reports the remaining space in the specified slot.
++   * @param slot **one**-based index of the slot in the agent's inventory
++   */
++  public async getItemSpace(slot: number): Promise<AgentActionResult> {
++    return await this.world.runAgentCommand(`agent getitemspace ${slot}`);
+   }
+ 
+-  public async getItemDetail(slot: number): Promise<void> {
+-    // Sadly this command does not return any data
+-    const res = await this.world.runCommand(`agent getitemdetail ${slot}`);
+-    if (res.statusCode < CommandStatusCode.Success) throw new Error(res.statusMessage);
++  /**
++   * Reports the item held in the specified slot.
++   * @param slot **one**-based index of the slot in the agent's inventory
++   */
++  public async getItemDetail(slot: number): Promise<AgentActionResult> {
++    return await this.world.runAgentCommand(`agent getitemdetail ${slot}`);
+   }
+ 
+   /**
+diff --git a/src/enums/agent-action-type.ts b/src/enums/agent-action-type.ts
+new file mode 100644
+index 0000000..7bc5dc3
+--- /dev/null
++++ b/src/enums/agent-action-type.ts
+@@ -0,0 +1,32 @@
++/**
++ * Type of agent action reported in the header of an `action:agent` response frame.
++ *
++ * Introduced in Minecraft Bedrock 1.18.30, which moved agent commands from the
++ * `commandRequest` channel to a dedicated `action:agent` channel:
++ *
++ * > Agent-based commands in websockets moved to new "action:agent" format, and all
++ * > commands are now queued and include unique ids to correlate responses
++ *
++ * Reference: {@link https://github.com/mcpews/mcpews} `src/lib/protocol.ts`
++ */
++export enum AgentActionType {
++  Attack = 1,
++  Collect,
++  Destroy,
++  DetectRedstone,
++  /** @deprecated Superseded by {@link AgentActionType.DetectRedstone} handling. */
++  DetectObstacle,
++  Drop,
++  DropAll,
++  Inspect,
++  InspectData,
++  InspectItemCount,
++  InspectItemDetail,
++  InspectItemSpace,
++  Interact,
++  Move,
++  PlaceBlock,
++  Till,
++  TransferItemTo,
++  Turn,
++}
+diff --git a/src/enums/index.ts b/src/enums/index.ts
+index c99b05a..54007bd 100644
+--- a/src/enums/index.ts
++++ b/src/enums/index.ts
+@@ -1,4 +1,5 @@
+ export * from './ability-type';
++export * from './agent-action-type';
+ export * from './agent-direction';
+ export * from './command-status-code';
+ export * from './command-version';
+diff --git a/src/enums/message-purpose.ts b/src/enums/message-purpose.ts
+index 7d11335..270a2ed 100644
+--- a/src/enums/message-purpose.ts
++++ b/src/enums/message-purpose.ts
+@@ -10,4 +10,9 @@ export enum MessagePurpose {
+   BlockDataRequest = 'data:block',
+   ItemDataRequest = 'data:item',
+   MobDataRequest = 'data:mob',
+-}
+\ No newline at end of file
++  /**
++   * Dedicated channel for agent commands, introduced in Bedrock 1.18.30.
++   * Used for both the request and the response frame.
++   */
++  AgentAction = 'action:agent',
++}
+diff --git a/src/enums/packet.ts b/src/enums/packet.ts
+index aff660f..88387a2 100644
+--- a/src/enums/packet.ts
++++ b/src/enums/packet.ts
+@@ -8,6 +8,7 @@ export enum Packet {
+   EventUnsubscribe = 'unsubscribe',
+   EncryptionRequest = 'ws:encryptionRequest',
+   EncryptionResponse = 'ws:encryptionResponse',
++  AgentActionResponse = 'action:agent',
+ 
+   // --- mc event packets ---
+   BlockBroken = 'BlockBroken',
+diff --git a/src/errors/agent-action.ts b/src/errors/agent-action.ts
+new file mode 100644
+index 0000000..37d93af
+--- /dev/null
++++ b/src/errors/agent-action.ts
+@@ -0,0 +1,26 @@
++/**
++ * Thrown when an agent command received its `commandResponse` frame but the paired
++ * `action:agent` frame never arrived before the request timed out.
++ *
++ * The payload of an agent command lives entirely in the `action:agent` frame, so the
++ * request cannot be satisfied from the `commandResponse` alone. Resolving with the
++ * status-only frame would look like success while carrying no data, so this is reported
++ * as a failure instead.
++ */
++export class MissingAgentActionError extends Error {
++  /** Status code from the `commandResponse` frame that did arrive. */
++  public readonly statusCode: number | undefined;
++
++  /** Status message from the `commandResponse` frame that did arrive. */
++  public readonly statusMessage: string | undefined;
++
++  constructor(statusCode?: number, statusMessage?: string) {
++    super(
++      'Agent command received a commandResponse but no paired action:agent frame' +
++        (statusMessage ? ` (status ${statusCode}: ${statusMessage})` : '')
++    );
++    this.name = this.constructor.name;
++    this.statusCode = statusCode;
++    this.statusMessage = statusMessage;
++  }
++}
+diff --git a/src/errors/index.ts b/src/errors/index.ts
+index 29227e4..ec19c11 100644
+--- a/src/errors/index.ts
++++ b/src/errors/index.ts
+@@ -1,3 +1,4 @@
++export * from './agent-action';
+ export * from './command';
+ export * from './invalid-connection';
+ export * from './timeout';
+diff --git a/src/handlers/agent-action-response.ts b/src/handlers/agent-action-response.ts
+new file mode 100644
+index 0000000..e7092a1
+--- /dev/null
++++ b/src/handlers/agent-action-response.ts
+@@ -0,0 +1,19 @@
++import { Packet } from '../enums';
++import {
++  NetworkHandler,
++  type AgentActionResponsePacket,
++  type Connection,
++} from '../network';
++import type { IHeader } from '../types';
++
++export class AgentActionResponseHandler extends NetworkHandler {
++  public static readonly packet = Packet.AgentActionResponse;
++
++  public handle(
++    packet: AgentActionResponsePacket,
++    connection: Connection,
++    header: IHeader
++  ): void {
++    connection.onAgentActionResponse(header.requestId, packet);
++  }
++}
+diff --git a/src/handlers/index.ts b/src/handlers/index.ts
+index 4e620ba..461a266 100644
+--- a/src/handlers/index.ts
++++ b/src/handlers/index.ts
+@@ -2,6 +2,7 @@ import { CommandResponseHandler } from './command-response';
+ import { CommandErrorHandler } from './command-error';
+ import { EncryptionResponseHandler } from './encryption-response';
+ import { DataResponseHandler } from './data-response';
++import { AgentActionResponseHandler } from './agent-action-response';
+ import { PlayerMessageHandler } from './player-message';
+ import { PlayerTransformHandler } from './player-transform';
+ import { PlayerTravelledHandler } from './player-travelled';
+@@ -24,6 +25,7 @@ export const Handlers = [
+   PlayerMessageHandler,
+   EncryptionResponseHandler,
+   DataResponseHandler,
++  AgentActionResponseHandler,
+   BlockBrokenHandler,
+   BlockPlacedHandler,
+   ItemAcquiredHandler,
+diff --git a/src/network/connection.ts b/src/network/connection.ts
+index 51a4585..d8e8030 100644
+--- a/src/network/connection.ts
++++ b/src/network/connection.ts
+@@ -1,11 +1,11 @@
+ import { randomUUID } from 'crypto';
+ import { Encryption } from './encryption';
+-import { CommandError, RequestTimeoutError, InvalidConnectionError } from '../errors';
++import { CommandError, RequestTimeoutError, InvalidConnectionError, MissingAgentActionError } from '../errors';
+ import { CommandStatusCode } from '../enums';
+-import { CommandErrorPacket, type EncryptionResponsePacket, type CommandResponsePacket, type DataResponsePacket } from './packets';
++import { CommandErrorPacket, type AgentActionResponsePacket, type EncryptionResponsePacket, type CommandResponsePacket, type DataResponsePacket } from './packets';
+ import type { WebSocket } from 'ws';
+ import type { Network } from './network';
+-import type { PendingResponse } from '../types';
++import type { AgentActionResult, PendingResponse } from '../types';
+ 
+ 
+ export class Connection {
+@@ -46,28 +46,68 @@ export class Connection {
+     const data = this.pendingResponses.get(requestId);
+     if (!data) return; //console.error('[Network] Received invalid command response', packet.data);
+ 
+-    this.pendingResponses.delete(requestId);
+-    clearTimeout(data.timeout);
+-    
+     if (packet instanceof CommandErrorPacket) {
++      this.settle(requestId, data);
+       data.reject(
+         new CommandError(CommandStatusCode[packet.statusCode], packet.statusMessage, packet.statusCode)
+       );
+-    } else {
+-      data.resolve(packet);
++      return;
+     }
+ 
+-    if (this.responseTimes.length > 20) this.responseTimes.shift();
+-    this.responseTimes.push(Date.now() - data.sentAt);
++    // An agent command answers with two frames sharing one requestId: this status-only
++    // `commandResponse`, and an `action:agent` frame carrying the payload. Buffer this one
++    // and keep waiting unless the `action:agent` frame already arrived out of order.
++    if (data.expectsAgentAction) {
++      // A failed agent command never produces an `action:agent` frame, so fail now instead
++      // of waiting out the timeout.
++      if (packet.statusCode < CommandStatusCode.Success) {
++        this.settle(requestId, data);
++        data.reject(
++          new CommandError(CommandStatusCode[packet.statusCode], packet.statusMessage, packet.statusCode)
++        );
++        return;
++      }
++
++      data.commandResponse = packet;
++      if (data.agentAction) this.completeAgentAction(requestId, data);
++      return;
++    }
++
++    this.settle(requestId, data);
++    data.resolve(packet);
++  }
++
++  /**
++   * Handles the `action:agent` frame of an agent command.
++   *
++   * Completes the request immediately, folding in the paired `commandResponse` when it has
++   * already been seen. Completing on this frame rather than waiting for both avoids
++   * hanging when Minecraft delivers them out of order or omits the status frame.
++   */
++  public onAgentActionResponse(requestId: string, packet: AgentActionResponsePacket): void {
++    const data = this.pendingResponses.get(requestId);
++    if (!data) return console.error('[Network] Received unexpected agent action response', packet);
++
++    data.agentAction = packet;
++    this.completeAgentAction(requestId, data);
++  }
++
++  private completeAgentAction(requestId: string, data: PendingResponse): void {
++    const packet = data.agentAction!;
++    this.settle(requestId, data);
++
++    const result: AgentActionResult = {
++      ...packet.toAgentActionResult(),
++      commandResponse: data.commandResponse?.toCommandResult(),
++    };
++    data.resolve(result);
+   }
+ 
+   public onEncryptionResponse(requestId: string, packet: EncryptionResponsePacket): void {
+     const data = this.pendingResponses.get(requestId);
+     if (!data) return console.error('[Network] Received unexpected encryption response', packet);
+ 
+-    this.pendingResponses.delete(requestId);
+-    clearTimeout(data.timeout);
+-
++    this.settle(requestId, data);
+     data.resolve(packet);
+   }
+ 
+@@ -75,23 +115,51 @@ export class Connection {
+     const data = this.pendingResponses.get(requestId);
+     if (!data) return console.error('[Network] Received unexpected data response', packet);
+ 
++    this.settle(requestId, data);
++    data.resolve(packet);
++  }
++
++  /** Removes the pending entry, clears its timeout and records the round-trip time. */
++  private settle(requestId: string, data: PendingResponse): void {
+     this.pendingResponses.delete(requestId);
+     clearTimeout(data.timeout);
+ 
+-    data.resolve(packet);
++    if (this.responseTimes.length > 20) this.responseTimes.shift();
++    this.responseTimes.push(Date.now() - data.sentAt);
+   }
+ 
+-  public awaitResponse<R>(requestId: string, timeoutDuration = 10_000): Promise<R> {
++  public awaitResponse<R>(
++    requestId: string,
++    timeoutDuration = 10_000,
++    options?: { expectsAgentAction?: boolean },
++  ): Promise<R> {
+     const sentAt = Date.now();
+ 
+     return new Promise<R>((resolve, reject) => {
+       if (!this.isOpen) return reject(new InvalidConnectionError(this.identifier));
+ 
+       const timeout = setTimeout(() => {
++        const pending = this.pendingResponses.get(requestId);
++        this.pendingResponses.delete(requestId);
++
++        // A buffered `commandResponse` with no `action:agent` frame carries only a status
++        // and none of the payload the caller asked for. Reporting it as a success would be
++        // a silent empty result, so it is surfaced as a distinct failure instead.
++        const buffered = pending?.commandResponse;
++        if (buffered) {
++          return reject(new MissingAgentActionError(buffered.statusCode, buffered.statusMessage));
++        }
++
+         reject(new RequestTimeoutError());
+       }, timeoutDuration);
+ 
+-      this.pendingResponses.set(requestId, { resolve, reject, timeout, sentAt });
++      this.pendingResponses.set(requestId, {
++        resolve,
++        reject,
++        timeout,
++        sentAt,
++        expectsAgentAction: options?.expectsAgentAction,
++      });
+     });
+   }
+ 
+@@ -103,4 +171,4 @@ export class Connection {
+       );
+     }
+   }
+-}
+\ No newline at end of file
++}
+diff --git a/src/network/network.ts b/src/network/network.ts
+index 311c100..45a8078 100644
+--- a/src/network/network.ts
++++ b/src/network/network.ts
+@@ -178,6 +178,7 @@ export class Network extends ExtendedEmitter<NetworkEvents> {
+       MessagePurpose.Error,
+       MessagePurpose.Event,
+       MessagePurpose.DataResponse,
++      MessagePurpose.AgentAction,
+     ];
+ 
+     if (!deserializablePurposes.includes(messagePurpose)) {
+@@ -191,6 +192,7 @@ export class Network extends ExtendedEmitter<NetworkEvents> {
+       case MessagePurpose.Encrypt: packetId = Packet.EncryptionResponse; break;
+       case MessagePurpose.Error: packetId = Packet.CommandError; break;
+       case MessagePurpose.DataResponse: packetId = Packet.DataResponse; break;
++      case MessagePurpose.AgentAction: packetId = Packet.AgentActionResponse; break;
+       case MessagePurpose.Event: packetId = rawPacket.header.eventName; break;
+       default:
+         packetId = undefined!;
+diff --git a/src/network/packets/agent-action-response.ts b/src/network/packets/agent-action-response.ts
+new file mode 100644
+index 0000000..202b20f
+--- /dev/null
++++ b/src/network/packets/agent-action-response.ts
+@@ -0,0 +1,40 @@
++import { BasePacket } from './base';
++import { MessagePurpose, Packet, type AgentActionType } from '../../enums';
++import { PacketClass } from '../decorator';
++import type { AgentActionResult } from '../../types';
++
++/**
++ * Response frame for an agent command sent with the `action:agent` message purpose.
++ *
++ * The header carries `action` and `actionName`; the body carries the payload. Mojang does
++ * not document the body's field names, so it is passed through verbatim rather than
++ * mapped onto named properties.
++ */
++@PacketClass(Packet.AgentActionResponse, MessagePurpose.AgentAction)
++export class AgentActionResponsePacket extends BasePacket {
++  public data!: Record<string, any>;
++
++  public action!: AgentActionType;
++
++  public actionName!: string;
++
++  public toAgentActionResult<T extends Record<string, unknown> = Record<string, unknown>>(): AgentActionResult<T> {
++    return {
++      action: this.action,
++      actionName: this.actionName,
++      body: this.data as T,
++    };
++  }
++
++  public static deserialize(
++    data: Record<string, any> | undefined,
++    header?: Record<string, any>
++  ): AgentActionResponsePacket {
++    const packet = new AgentActionResponsePacket();
++    packet.data = data ?? {};
++    packet.action = header?.action as AgentActionType;
++    packet.actionName = header?.actionName as string;
++
++    return packet;
++  }
++}
+diff --git a/src/network/packets/index.ts b/src/network/packets/index.ts
+index 7a0799a..d77f1d8 100644
+--- a/src/network/packets/index.ts
++++ b/src/network/packets/index.ts
+@@ -1,4 +1,5 @@
+ export * from './base';
++export * from './agent-action-response';
+ export * from './block-broken';
+ export * from './block-placed';
+ export * from './command-error';
+diff --git a/src/network/packets/packets.ts b/src/network/packets/packets.ts
+index 4c7f9c0..209215a 100644
+--- a/src/network/packets/packets.ts
++++ b/src/network/packets/packets.ts
+@@ -4,6 +4,7 @@ import type { BasePacket } from './base';
+ import { CommandRequestPacket } from './command-request';
+ import { CommandResponsePacket } from './command-response';
+ import { CommandErrorPacket } from './command-error';
++import { AgentActionResponsePacket } from './agent-action-response';
+ import { DataRequestPacket } from './data-request';
+ import { DataResponsePacket } from './data-response';
+ import { EventSubscribePacket } from './event-subscribe';
+@@ -37,6 +38,7 @@ export const Packets = {
+   [Packet.EventUnsubscribe]: EventUnsubscribePacket,
+   [Packet.EncryptionRequest]: EncryptionRequestPacket,
+   [Packet.EncryptionResponse]: EncryptionResponsePacket,
++  [Packet.AgentActionResponse]: AgentActionResponsePacket,
+ 
+   // --- mc event packets ---
+   [Packet.BlockBroken]: BlockBrokenPacket,
+diff --git a/src/types/network/connection.ts b/src/types/network/connection.ts
+index b481ff9..6cc2241 100644
+--- a/src/types/network/connection.ts
++++ b/src/types/network/connection.ts
+@@ -1,6 +1,21 @@
++import type { AgentActionResponsePacket, CommandResponsePacket } from '../../network/packets';
++
+ export interface PendingResponse<RES = any, REJ = any> {
+   resolve: (data: RES) => void;
+   reject: (error: REJ) => void;
+   timeout: NodeJS.Timeout;
+   sentAt: number;
++
++  /**
++   * Set when the request was sent on the `action:agent` channel, which answers with two
++   * frames sharing one `requestId`. The request is only settled once the `action:agent`
++   * frame arrives; a `commandResponse` alone is buffered rather than resolved.
++   */
++  expectsAgentAction?: boolean;
++
++  /** Buffered `commandResponse` frame, held until the paired `action:agent` frame arrives. */
++  commandResponse?: CommandResponsePacket;
++
++  /** Buffered `action:agent` frame, held when it arrives before its `commandResponse`. */
++  agentAction?: AgentActionResponsePacket;
+ }
+diff --git a/src/types/network/packet.ts b/src/types/network/packet.ts
+index 6145d5d..2688a50 100644
+--- a/src/types/network/packet.ts
++++ b/src/types/network/packet.ts
+@@ -1,6 +1,6 @@
+-import type { MessagePurpose, Packet } from '../../enums';
++import type { AgentActionType, MessagePurpose, Packet } from '../../enums';
+ 
+-export type IHeader = EventHeader | CommandHeader | ErrorHeader | EncryptHeader | DataResponseHeader;
++export type IHeader = EventHeader | CommandHeader | ErrorHeader | EncryptHeader | DataResponseHeader | AgentActionHeader;
+ 
+ export interface EventHeader extends BaseHeader {
+   messagePurpose: MessagePurpose.Subscribe | MessagePurpose.Unsubscribe | MessagePurpose.Event;
+@@ -29,6 +29,16 @@ export interface DataResponseHeader extends BaseHeader {
+   type: number;
+ }
+ 
++
++/**
++ * Header of an `action:agent` frame. Used in both directions: the request carries only the
++ * base fields, while the response adds the action discriminator and its name.
++ */
++export interface AgentActionHeader extends BaseHeader {
++  messagePurpose: MessagePurpose.AgentAction;
++  action?: AgentActionType;
++  actionName?: string;
++}
+ interface BaseHeader {
+   version: number;
+   requestId: string;
+diff --git a/src/types/world/agent-action-result.ts b/src/types/world/agent-action-result.ts
+new file mode 100644
+index 0000000..e90d72c
+--- /dev/null
++++ b/src/types/world/agent-action-result.ts
+@@ -0,0 +1,35 @@
++import type { AgentActionType } from '../../enums';
++import type { CommandResult } from './command-result';
++
++/**
++ * Result of an agent command sent over the `action:agent` message purpose.
++ *
++ * Minecraft answers a single `action:agent` request with **two** frames that share the
++ * same `requestId`: a regular `commandResponse` carrying only the status, followed by an
++ * `action:agent` frame carrying the actual payload. Both are surfaced here.
++ *
++ * @remarks
++ * The field names inside {@link AgentActionResult.body} are **not documented** by Mojang
++ * and are not asserted by this library. Read `body` directly, or supply a type argument
++ * once you have confirmed the shape against a live client. The Code Connection API
++ * documentation describes `inspect` as returning a block name, but the exact key has not
++ * been verified against a current build.
++ */
++export interface AgentActionResult<T extends Record<string, unknown> = Record<string, unknown>> {
++  /** Numeric action discriminator from the response header. */
++  action: AgentActionType;
++
++  /** Human-readable action name from the response header, e.g. `"inspect"`. */
++  actionName: string;
++
++  /** Raw body of the `action:agent` frame, passed through without interpretation. */
++  body: T;
++
++  /**
++   * The `commandResponse` frame Minecraft sends alongside the `action:agent` frame.
++   *
++   * Undefined when the `action:agent` frame arrived first and no paired
++   * `commandResponse` had been observed by the time the request completed.
++   */
++  commandResponse?: CommandResult<Record<string, unknown>>;
++}
+diff --git a/src/types/world/index.ts b/src/types/world/index.ts
+index 11742e1..7da8257 100644
+--- a/src/types/world/index.ts
++++ b/src/types/world/index.ts
+@@ -1,4 +1,5 @@
+ export * from '../block/block';
++export * from './agent-action-result';
+ export * from './command-options';
+ export * from './command-result';
+ export * from './rawtext-resolvable';
+diff --git a/src/world/world.ts b/src/world/world.ts
+index 9353a6e..e78cf58 100644
+--- a/src/world/world.ts
++++ b/src/world/world.ts
+@@ -8,6 +8,7 @@ import { serializeStates } from '../block';
+ import type { RawMessage, Vector3 } from '@minecraft/server';
+ import type { Server } from '../server';
+ import type {
++  AgentActionResult,
+   PlayerList,
+   PlayerDetail,
+   PlayerListDetail,
+@@ -113,6 +114,40 @@ export class World {
+     const response = await this.connection.awaitResponse<CommandResponsePacket>(header.requestId, options?.timeout);
+     return response.toCommandResult<R>();
+   }
++
++  /**
++   * Runs an agent command over the dedicated `action:agent` channel.
++   *
++   * Agent commands answer with two frames that share one `requestId`: a status-only
++   * `commandResponse`, and an `action:agent` frame carrying the payload. Sending an agent
++   * command as a plain `commandRequest` discards that payload, which is why the helpers on
++   * {@link Agent} previously reported nothing.
++   *
++   * @param command Agent command to run, including the leading `agent` keyword.
++   * @returns The `action:agent` payload, with the paired `commandResponse` attached.
++   *
++   * @throws This function can throw errors.
++   * - {@link InvalidConnectionError}
++   * - {@link RequestTimeoutError}
++   * - {@link MissingAgentActionError}
++   */
++  public async runAgentCommand<R extends Record<string, unknown> = Record<string, unknown>>(
++    command: string,
++    options?: CommandOptions,
++  ): Promise<AgentActionResult<R>> {
++    const packet = new CommandRequestPacket();
++    packet.version = options?.version ?? this.server.options.commandVersion!;
++    packet.commandLine = command;
++
++    const header = this.send(packet, { overrideMessagePurpose: MessagePurpose.AgentAction });
++    if (!header) throw new Error('Packet transmission canceled');
++
++    return await this.connection.awaitResponse<AgentActionResult<R>>(
++      header.requestId,
++      options?.timeout,
++      { expectsAgentAction: true },
++    );
++  }
+   
+   /**
+    * Sends a messsage to the player.
+diff --git a/test/agent-action.test.mjs b/test/agent-action.test.mjs
+new file mode 100644
+index 0000000..f92ded4
+--- /dev/null
++++ b/test/agent-action.test.mjs
+@@ -0,0 +1,204 @@
++// Unit tests for the two-frame `action:agent` correlation in Connection.
++//
++// Minecraft answers a single `action:agent` request with two frames sharing one
++// requestId: a status-only `commandResponse`, then an `action:agent` frame carrying the
++// payload. These cases cover the orderings and failures a live client cannot be made to
++// produce on demand.
++//
++// Run: node test/agent-action.test.mjs   (after `tsdown`)
++
++import assert from 'node:assert/strict';
++import {
++  AgentActionResponsePacket,
++  CommandErrorPacket,
++  CommandResponsePacket,
++  Connection,
++  MissingAgentActionError,
++  CommandError,
++  RequestTimeoutError,
++} from '../dist/index.mjs';
++
++/** Minimal stand-ins: the correlation path touches neither the socket nor the network. */
++const stubWs = { readyState: 1, OPEN: 1, send() {} };
++const stubNetwork = {};
++
++const newConnection = () => new Connection(stubNetwork, stubWs);
++
++const commandResponse = (data) => CommandResponsePacket.deserialize(data);
++
++const agentAction = (body, header) => AgentActionResponsePacket.deserialize(body, header);
++
++const inspectHeader = { action: 8, actionName: 'inspect' };
++
++let passed = 0;
++let failed = 0;
++
++async function test(name, fn) {
++  try {
++    await fn();
++    passed++;
++    console.log(`  ok   ${name}`);
++  } catch (error) {
++    failed++;
++    console.log(`  FAIL ${name}`);
++    console.log(`       ${error.message}`);
++  }
++}
++
++console.log('action:agent correlation');
++
++await test('normal order: commandResponse then action:agent resolves with both', async () => {
++  const conn = newConnection();
++  const promise = conn.awaitResponse('req-1', 1000, { expectsAgentAction: true });
++
++  conn.onCommandResponse('req-1', commandResponse({ statusCode: 0, statusMessage: 'ok' }));
++
++  // The commandResponse alone must not settle the request.
++  let settled = false;
++  void promise.then(() => (settled = true));
++  await new Promise((r) => setImmediate(r));
++  assert.equal(settled, false, 'resolved on commandResponse alone');
++
++  conn.onAgentActionResponse('req-1', agentAction({ blockName: 'coal_ore' }, inspectHeader));
++
++  const result = await promise;
++  assert.equal(result.action, 8);
++  assert.equal(result.actionName, 'inspect');
++  assert.deepEqual(result.body, { blockName: 'coal_ore' });
++  assert.equal(result.commandResponse.statusMessage, 'ok');
++  assert.equal(conn.pendingResponses.size, 0, 'pending entry not cleaned up');
++});
++
++await test('reversed order: action:agent first still resolves', async () => {
++  const conn = newConnection();
++  const promise = conn.awaitResponse('req-2', 1000, { expectsAgentAction: true });
++
++  conn.onAgentActionResponse('req-2', agentAction({ blockName: 'stone' }, inspectHeader));
++
++  const result = await promise;
++  assert.deepEqual(result.body, { blockName: 'stone' });
++  assert.equal(result.commandResponse, undefined, 'commandResponse should be absent');
++
++  // The late commandResponse must be dropped without throwing.
++  conn.onCommandResponse('req-2', commandResponse({ statusCode: 0, statusMessage: 'ok' }));
++  assert.equal(conn.pendingResponses.size, 0);
++});
++
++await test('missing action:agent rejects with MissingAgentActionError, not a silent success', async () => {
++  const conn = newConnection();
++  const promise = conn.awaitResponse('req-3', 40, { expectsAgentAction: true });
++
++  conn.onCommandResponse('req-3', commandResponse({ statusCode: 0, statusMessage: 'ok' }));
++
++  await assert.rejects(promise, (error) => {
++    assert.ok(error instanceof MissingAgentActionError, `got ${error.constructor.name}`);
++    assert.equal(error.statusCode, 0);
++    assert.equal(error.statusMessage, 'ok');
++    return true;
++  });
++  assert.equal(conn.pendingResponses.size, 0, 'timed-out entry leaked');
++});
++
++await test('no frames at all rejects with RequestTimeoutError', async () => {
++  const conn = newConnection();
++  const promise = conn.awaitResponse('req-4', 40, { expectsAgentAction: true });
++
++  await assert.rejects(promise, (error) => {
++    assert.ok(error instanceof RequestTimeoutError, `got ${error.constructor.name}`);
++    return true;
++  });
++  assert.equal(conn.pendingResponses.size, 0);
++});
++
++await test('failed command rejects immediately without waiting for the timeout', async () => {
++  const conn = newConnection();
++  const started = Date.now();
++  const promise = conn.awaitResponse('req-5', 5000, { expectsAgentAction: true });
++
++  conn.onCommandResponse(
++    'req-5',
++    commandResponse({ statusCode: -2147483647, statusMessage: 'Command not found' })
++  );
++
++  await assert.rejects(promise, (error) => {
++    assert.ok(error instanceof CommandError, `got ${error.constructor.name}`);
++    return true;
++  });
++  const elapsed = Date.now() - started;
++  assert.ok(elapsed < 1000, `waited ${elapsed}ms; should fail fast`);
++});
++
++await test('error frame rejects with CommandError', async () => {
++  const conn = newConnection();
++  const promise = conn.awaitResponse('req-6', 1000, { expectsAgentAction: true });
++
++  conn.onCommandResponse(
++    'req-6',
++    CommandErrorPacket.deserialize({ statusCode: -2147483647, statusMessage: 'boom' })
++  );
++
++  await assert.rejects(promise, (error) => {
++    assert.ok(error instanceof CommandError, `got ${error.constructor.name}`);
++    return true;
++  });
++});
++
++await test('interleaved requestIds stay isolated', async () => {
++  const conn = newConnection();
++  const a = conn.awaitResponse('req-a', 1000, { expectsAgentAction: true });
++  const b = conn.awaitResponse('req-b', 1000, { expectsAgentAction: true });
++
++  // Interleave the four frames so a naive single-slot buffer would cross them over.
++  conn.onCommandResponse('req-a', commandResponse({ statusCode: 0, statusMessage: 'A' }));
++  conn.onCommandResponse('req-b', commandResponse({ statusCode: 0, statusMessage: 'B' }));
++  conn.onAgentActionResponse('req-b', agentAction({ blockName: 'b_block' }, inspectHeader));
++  conn.onAgentActionResponse('req-a', agentAction({ blockName: 'a_block' }, inspectHeader));
++
++  const [resA, resB] = await Promise.all([a, b]);
++  assert.deepEqual(resA.body, { blockName: 'a_block' });
++  assert.equal(resA.commandResponse.statusMessage, 'A');
++  assert.deepEqual(resB.body, { blockName: 'b_block' });
++  assert.equal(resB.commandResponse.statusMessage, 'B');
++});
++
++await test('100 concurrent agent commands all resolve with their own payload', async () => {
++  const conn = newConnection();
++  const ids = Array.from({ length: 100 }, (_, i) => `bulk-${i}`);
++  const promises = ids.map((id) => conn.awaitResponse(id, 2000, { expectsAgentAction: true }));
++
++  // Status frames first, in order; payload frames afterwards, in reverse.
++  for (const id of ids) {
++    conn.onCommandResponse(id, commandResponse({ statusCode: 0, statusMessage: id }));
++  }
++  for (const id of [...ids].reverse()) {
++    conn.onAgentActionResponse(id, agentAction({ blockName: id }, inspectHeader));
++  }
++
++  const results = await Promise.all(promises);
++  results.forEach((result, i) => {
++    assert.equal(result.body.blockName, ids[i]);
++    assert.equal(result.commandResponse.statusMessage, ids[i]);
++  });
++  assert.equal(conn.pendingResponses.size, 0);
++});
++
++await test('unknown requestId is ignored rather than throwing', async () => {
++  const conn = newConnection();
++  conn.onAgentActionResponse('never-sent', agentAction({}, inspectHeader));
++  conn.onCommandResponse('never-sent', commandResponse({ statusCode: 0, statusMessage: '' }));
++  assert.equal(conn.pendingResponses.size, 0);
++});
++
++await test('non-agent request is unaffected and resolves on commandResponse', async () => {
++  const conn = newConnection();
++  const promise = conn.awaitResponse('plain-1', 1000);
++
++  conn.onCommandResponse('plain-1', commandResponse({ statusCode: 0, statusMessage: 'plain' }));
++
++  const packet = await promise;
++  assert.equal(packet.statusMessage, 'plain');
++  assert.equal(conn.pendingResponses.size, 0);
++});
++
++console.log(`\n${passed} passed, ${failed} failed`);
++process.exit(failed === 0 ? 0 : 1);

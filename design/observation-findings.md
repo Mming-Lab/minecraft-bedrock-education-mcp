@@ -1,0 +1,492 @@
+---
+name: observation-findings
+description: （メモ / エージェント定義ではない）socket-be の観測API調査結果。bedrock-protocol-analyst と agent-experience-designer が出発点として使う実測データ。
+---
+
+# socket-be 2.3.1 観測能力の実測結果
+
+調査方法: `npm install socket-be@2.3.1` して `node_modules/socket-be/dist/index.d.ts`（1,946行）を直接読んだ。以下は推測ではなく型定義からの実測。
+
+## 使えるもの
+
+### イベント（26種）— `index.d.ts:487-514` の `ServerEvent`
+`Open` / `Close` / `WorldAdd` / `WorldRemove` / `WorldInitialize` / `PlayerJoin` / `PlayerLeave` / `PlayerLoad` /
+`PlayerChat` / `PlayerTitle` / `PlayerMessage` / `EnableEncryption` / `BlockBroken` / `BlockPlaced` /
+`ItemAcquired` / `ItemCrafted` / `ItemEquipped` / `ItemInteracted` / `ItemSmelted` / `ItemTraded` /
+`MobInteracted` / `PlayerBounced` / `PlayerTeleported` / `PlayerTransform` / `PlayerTravelled` / `TargetBlockHit`
+
+**現行実装が購読しているのは `Open` / `PlayerJoin` / `PlayerLeave` の3つのみ（`src/server.ts:171-179`）。23個が未使用。**
+
+### World の問い合わせ — `index.d.ts:1380-1404`
+| メソッド | 戻り値 | 備考 |
+|---|---|---|
+| `getTopSolidBlock(location?)` | `{ blockName, location }` | **唯一の空間的ブロック読み取り。X/Z列の最上部固体ブロックのみ** |
+| `queryData('block'\|'item'\|'mob')` | `BlockQueryResult[]` = `{aux, id, name}` | **ワールドの中身ではなくID一覧（パレット）**。ID検証に使える |
+| `getCurrentTick` / `getDay` / `getTimeOfDay` / `getWeather` | — | 時刻・天候 |
+| `getPlayers` / `getPlayerList` / `getPlayerDetail` / `getLocalPlayer` | — | プレイヤー |
+| `runCommand<R>(cmd, options)` | `CommandResult<R>`（**型パラメータ付き**） | 汎用の逃げ道 |
+| `Scoreboard.getObjectives()` / `getScores()` | — | 永続的な数値状態を持てる |
+
+### Player の問い合わせ — `index.d.ts:918-932`
+`getLocation()` / `query()` → `QueryTargetResult{position, yRot, dimension, id, uniqueId}` /
+`getTags()` / `getDetails()` / `getAbilities()` / `getLevel()` / `getGameMode()` / `getScore()`
+
+## 使えないもの（重要）
+
+**任意座標のブロックを読むAPIが存在しない。** 「(10,64,20)に何があるか」は聞けない。
+- `getTopSolidBlock` は列の最上部のみ
+- `queryData('block')` はパレットであってワールド内容ではない
+- 回避策は `runCommand('testforblock x y z <id>')` だが、これは「**何があるか**」ではなく「**これがあるか**」しか答えない = 総当たりになる
+
+**未確認**: これが Bedrock WebSocket プロトコル自体の制約なのか、socket-be の未実装なのかは一次ソース未確認。`bedrock-protocol-analyst` が確認すること。
+
+## ここから導かれる設計方針（要検証）
+
+観測できないなら**記録する**:
+1. AIが配置したブロックを自前で保持する（現行は投げっぱなし）
+2. `BlockPlaced` / `BlockBroken` イベントで人間による変更も追跡する
+3. 1+2で「AIが把握しているワールドモデル」を構成する
+4. `getTopSolidBlock` で地形高さを取得 → **地面に沿った建築**が可能（現行は全て絶対座標で盲目的に配置）
+5. `queryData('block')` を**ブロックID事前検証**に使える（現行は検証ゼロ、不正IDはゲームまで飛ぶ）
+
+これは現行の「AIが想像で進めて失敗する」問題と同根 — **見えないから想像するしかない**。
+
+---
+
+# 追記: ブロックID取得手段の追加調査（2026-08-24）
+
+## 【最重要】socket-be が `agent inspect` のレスポンスを捨てている
+
+`node_modules/socket-be/dist/index.js:705-708` の実装:
+```js
+async inspect(direction) {
+  const res = await this.world.runCommand(`agent inspect ${direction}`);
+  if (res.statusCode < 0) throw new Error(res.statusMessage);
+  // ← res を返さずに破棄。戻り値の型は Promise<void>
+}
+```
+`inspectData` / `detect` / `detectRedstone` / `getItemCount` / `getItemSpace` / `getItemDetail` も全て同じ形で `Promise<void>`。
+
+型は `CommandResult<T> = { statusCode, statusMessage } & T`（`index.d.ts:1903`）なので、**追加フィールドにブロック情報が入っている。socket-be が捨てているだけ。**
+
+**現行実装への影響（実バグ）**: `src/tools/core/agent.ts:157` は
+`result = await this.agent.inspect(args.direction)` と書いているが、socket-be の戻り値は `undefined`。
+`inspect_block` アクションは「Agent inspected block forward」というメッセージだけを返し、**ブロックIDをAIに渡していない**。
+MakeCode の `agent inspect` が機能するのは、MakeCode がレスポンスを読んでいるため。
+
+**回避策**: `world.runCommand('agent inspect forward')` を直接呼び、戻り値の全フィールドを読む。
+**未確認**: レスポンスの正確なフィールド名。一次ソース（wiki / Code Connection API ドキュメント）に記載を発見できず。
+→ **実機で生JSONをダンプして確定させること。これが最優先の実機検証項目。**
+
+## コマンドによるブロックID取得の可否（wiki で確認済み）
+
+| 手段 | 可否 | 根拠 |
+|---|---|---|
+| `testforblock <pos> <block>` | **不可**。「指定ブロックが在るか」の二値のみ。何が在るかは答えない | https://minecraft.wiki/w/Commands/testforblock |
+| `agent inspect <direction>` | **可（Education限定・エージェント前方のみ）**。MakeCode が使っているのはこれ | socket-be 実装より |
+| 任意座標を返す汎用コマンド | **確認できず**。存在しない可能性が高いが未確認 | — |
+
+## `/structure save` によるワールド吸い出し案の評価
+
+依頼者から提案された案。wiki で確認した結果、**素直には通らない**:
+- `structure save <name> <from> <to> [disk|memory]` の `disk` は「**ワールドのデータベース自体に保存**」であり、単体ファイルの書き出しではない（https://minecraft.wiki/w/Commands/structure）
+- 単体の `.mcstructure` ファイルが得られるのはストラクチャーブロックUIの Export 機能で、**GUI操作**。コマンドから起動できない
+- 仮にワールドDB（LevelDB）を直接読む設計にすると、(a) MCPサーバがMinecraftと同一マシンに限定される、(b) ゲームがDBをロックしている可能性、(c) 保存タイミングが不定 — の3点で脆い
+
+**未確認**: `structure save ... disk` 実行後にワールドフォルダ内へ実ファイルが現れるかどうか。実機で確認する価値はある。
+なお `structure` コマンド自体は Education でも利用可能（wiki に "exclusive to Bedrock Edition and Minecraft Education" と明記）。
+
+## 依頼者からの確定情報
+- **Minecraft Education Edition でアドオン（ビヘイビアパック）は使える。**（2026-08-24、依頼者が明言）
+  → `@minecraft/server` Script API 経由でのブロック読み取りが有力な選択肢になる。
+  → 論点は「使えるか」ではなく「どう作るか」「教員が導入できる手順か」に移る。
+
+---
+
+# 追記: Script API ルート調査結果（2026-08-24）
+
+出典は全て learn.microsoft.com（Minecraft Creator Documentation）。担当エージェントは WebSearch と他ドメインへのアクセスがブロックされていたため、教育版固有の裏取りは未実施（教育版でアドオンが使えることは依頼者が確認済み）。
+
+## 確定した事実
+
+| 項目 | 結果 |
+|---|---|
+| ブロック読み取り | `Dimension.getBlock(location)` → `Block \| undefined`（**stable**）。`typeId` / `permutation`（ステート込み）/ `isAir` 等が取れる |
+| **範囲一括ダンプAPI** | **存在しない。** `getBlocks()` は experimental かつ戻り値 `ListBlockVolume` は**座標の集合**であってブロック種別ではない（「条件に合う座標を探す」API） |
+| 実装方法 | `BlockVolume.getBlockLocationIterator()` + `getBlock()` のループ。**stable のみで完結** |
+| 未ロードチャンク | `undefined` または `LocationInUnloadedChunkError`。`isChunkLoaded()` で判定可。`TickingAreaManager` で事前ロード可能 |
+| **`@minecraft/server-net`** | **使用不可。** 公式明記: "can only be used on Bedrock Dedicated Server. These APIs do not function within the Minecraft game client" |
+| 外部→スクリプト | `/scriptevent <id> <message>` で成立。**メッセージ長上限 2048 文字**（公式明記）。Requires Cheats: Yes |
+| 長時間処理 | `system.runJob()` が**必須**。1tickで回すと watchdog shutdown のリスク。generator を1ブロック1 yield の粒度で書くのが公式推奨 |
+| Beta APIs トグル | **stable のみを使えば不要。** experimental な `getBlocks()` を使うと必須になる → **使わない設計を推奨** |
+
+## スクリプト→外部の経路（最大の論点）
+
+エージェントは「公式ドキュメントに WebSocket プロトコルのイベント仕様が無いため確認不能」と報告。
+**ただし socket-be の型定義に決定的な証拠がある（親エージェントが確認）:**
+
+```ts
+declare enum PlayerMessageType {   // index.d.ts:479
+    Chat = "chat",  Say = "say",  Me = "me",  Tell = "tell",  Title = "title"
+}
+declare class PlayerMessagePacket extends BasePacket {   // index.d.ts:1179
+    type: PlayerMessageType;  message: string;  sender: string;  receiver: string;
+}
+```
+
+→ **プロトコルは `say` / `tell` を PlayerMessage として運んでいる。**
+→ スクリプト側から `dimension.runCommand('say <payload>')` すれば WebSocket 側で `message` 文字列として受信できる可能性が高い。
+→ **未確認**: `world.sendMessage()` が同じ経路に乗るか、1メッセージあたりの最大バイト数、1tickあたりの送出上限と欠落率。**実測が必要。**
+
+## データ量の問題
+
+- 16³ = 4,096ブロック / 32³ = 32,768 / 64³ = 262,144
+- `typeId` は `"minecraft:stone"` 形式で15〜30バイト → **素朴なJSONだと16³で60〜120KB**
+- `/scriptevent` の2048文字上限にもチャット送出にも載らない
+- → **パレット化（typeId辞書 + 整数インデックス）+ RLE が事実上必須**
+- → 分割送出（seq/total ヘッダで再結合）の設計が必要
+
+## 最優先の実機検証項目
+1. `say` 経由でスクリプトから外部へ文字列が届くか（socket-beで `/wsserver` 接続して実測）
+2. 1メッセージあたりの最大バイト数（二分探索）
+3. 1tickあたりの送出可能数と欠落率
+4. `getBlock()` の実効スループット（blocks/tick、PC/Chromebook/iPad別）
+
+---
+
+# 【訂正】コマンドルート調査結果（2026-08-24）— 本ファイルの前提を一部覆す
+
+## ★訂正1: `testforblock` は二値ではない
+
+本ファイル冒頭で「`testforblock` は二値のみ」と書いたのは**誤り**。
+WebSocket の `commandResponse` は不一致時の `statusMessage` に**実際に在るブロック名を含む**。
+
+```js
+// sanand0/minecraft-websocket  mineserver-blockcount.js:40,46-47（稼働中の公開実装）
+send(`testforblock ~${x} ~${y} ~${z} air`)
+const blockMatch = msg.body.statusMessage.match(/is (.*?) \(expected:/)
+// body.position も返る
+```
+minecraft.wiki は「一致しない」という*条件*しか記述せず、返却文字列を記載していない。
+**wikiだけを読むと二値に見えるが、実際の応答には情報がある。**
+→ **1コマンドで任意座標のブロックが判明する。**
+
+## ★訂正2: 100コマンドを同時に飛ばせる（最大の最適化）
+
+- 同時未応答コマンドの上限は **100本**。超過で `-2147418109` "Too many commands have been requested"
+  （socket-be の enum に `TooManyPendingRequests = -2147418109`、`dist/index.js:250`）
+- 現行実装は `src/server.ts:636` で完全直列、さらに `src/tools/base/tool.ts:203-211` が
+  10コマンドごとに5ms・50コマンドごとに20msのスリープを追加
+- socket-be の `runCommand` はキューもスロットルも持たず requestId 照合のみ
+  → **呼び出し側で `Promise.all` を100本ずつ回すだけでパイプライン化できる**
+
+| 4096ブロック（16³） | 時間 |
+|---|---|
+| 現行（直列＋スリープ） | 約208秒 |
+| パイプライン（100並列） | **約2秒（100倍）** |
+
+## 手法の序列（16³=4096ブロック、往復50ms仮定・100並列）
+
+| 手法 | 時間 | 得られる情報 | 備考 |
+|---|---|---|---|
+| `gettopsolidblock` 縦走査（地表25%固体） | **0.64秒** | blockName + blockData + position | **構造化・ローカライズ非依存**。空気は無料でスキップ |
+| `testforblock` 全走査 | **2.05秒** | 全ブロック名（表示名） | 非破壊・任意座標・候補推測不要 |
+| `fill replace` の `fillCount` | 0.008秒 | 個数のみ（座標不明） | 32768ブロックを1コマンド。前段フィルタ向き |
+| `execute if blocks` 領域差分 | 0.05秒 | 1ビット | キャッシュ有効性判定に有効 |
+| `execute if block` 線形探索 | 819秒 | 全ブロック | 1コマンド1ビットで不利 |
+| `agent inspect` 総当たり | 239秒 | 前方1ブロック | **並列化不可（エージェントは単一グローバル状態）→ 完全に劣位** |
+
+## その他の確定事項
+- **`execute store` は Java 専用**（wiki に `only|java` 明記）→ **スコアボード経由の一括回収は成立しない**
+- `gettopsolidblock` は構造化フィールド `{blockName, blockData, position}` を返す。
+  Sandertv/mcwss と socket-be の**独立2実装が同じフィールド名**を使用（socket-be `dist/index.js:2395-2399`）
+- `fill <X> replace <X>`（自己置換）で非破壊カウントできる可能性。**Bedrockが計上するか未確認**
+- `tickingarea` で強制ロード可能。**ただし同時10エリア・1エリア100チャンクまで**（実質的な同時読み取り範囲の上限）
+- `fill` の体積上限 32,768（MCPE-26134。wikiにBedrock版の記載なし、要実測）
+
+## 残るリスク
+1. **ローカライズ** — `statusMessage` のブロック名は表示名。日本語クライアントで「石」になる恐れ。
+   対策: `queryData('block')` の `{aux, id, name}` レジストリで表示名↔ID表を1回構築
+2. **`gettopsolidblock` の "solid" の定義** — 水・葉・松明をスキップすると読み取りに穴が空く。未確認
+
+## 最優先の実機検証（合計10コマンド以内で設計が確定する）
+1. `testforblock <既知の石の座標> minecraft:structure_void` → `body` 全体をダンプ（応答文字列の実物）
+2. 同上を日本語クライアントで実行（ローカライズ有無）
+3. 水面・葉ブロックの上で `gettopsolidblock`（solid の定義）
+4. `say` を1本/10本/100本並列で流しレイテンシ実測（本見積もりの全秒数の根拠）
+
+---
+
+# 【本命発見】プロトコル深掘り調査結果（2026-08-24）
+
+## ★`getchunkdata` — 1リクエストで16×16=256列の一括読み取り
+
+```
+getchunkdata <dimension> <chunkX> <chunkZ> <height>
+```
+- Bedrock/Education 限定の**隠しコマンド**。Operator権限。**socket-be 未実装**
+- LeviLamina（現行バイナリのシンボル自動生成、v26.20.7 / 2026-08-01）に現存確認:
+  `src/mc/server/commands/edu/GetChunkDataCommand.h` → `mDimension / mChunkX / mChunkZ / mHeight`
+- minecraft.wiki: 「指定y値より下の、チャンクのブロックIDつき高さマップ」「**256エントリ（16×16）**」
+- 併せて `getchunks <dimension>` も存在（引数・返り値とも未確認）
+
+**返り値フォーマットが2説で食い違う（要実機検証）**
+- mcwss（Go, 2020-07最終更新）`protocol/command/chunk_data.go` の `ParseChunkData`:
+  カンマ区切り + `*N` ランレングス、各値 base64 デコードで4バイト = **B, G, R, height**
+- minecraft.wiki（現行）: 「6桁のブロック識別子、末尾2文字が base64 の高さ」
+- 推測: 1.18.30 の「ブロックIDが数値から名前ベースへ移行」で変わった可能性
+
+**`getchunkdata` のパーサ実装は mcwss にしか存在しない。**
+
+## ★`agent inspect` の結果が消える真因
+
+1.18.30 で **`action:agent` 専用チャネル**が導入（Mojang公式リリースノート）:
+> Agent-based commands in websockets moved to new "action:agent" format, and all commands
+> are now queued and include unique ids to correlate responses
+
+**同一 requestId に対し `commandResponse` と `action:agent` の2フレームが返る。**
+socket-be は前者で resolve し、後者は受信ハンドラの許可リストに無いため破棄:
+```js
+const deserializablePurposes = ["commandResponse","ws:encrypt","error","event","data"];
+if (!deserializablePurposes.includes(messagePurpose)) {
+  console.error("[Network] Invalid message purpose:", messagePurpose); return; }
+```
+`chat` も同様に破棄されている。**mcpews (`src/lib/server.ts` sendAgentCommand) は2フレーム受信を正しく実装。**
+
+LeviLamina `src/mc/world/actor/agent/agent_commands/InspectCommand.h`:
+`Block const* mBlock` に結果を保持 → `isDone()` ポーリング → `fireCommandDoneEvent()` の遅延実行モデル。
+`MinecraftAgentActionType`: Inspect=8（mcpews `protocol.ts`）。**body のフィールド名は mcpews でも `unknown`＝未特定。**
+
+## ★socket-be の実装カバレッジ（技術選定に直結）
+
+| | socket-be | 実プロトコル |
+|---|---|---|
+| イベント | 26 | **83**（bedrockws-deno のzodスキーマ実測。うち69は未解析） |
+| `action:agent` | **破棄** | 存在 |
+| `chat` 購読（`chat:subscribe`） | なし | 存在（sender/receiver/messageでフィルタ可） |
+| `getchunkdata` / `getchunks` | なし | 存在 |
+| `agent getitemdetail/space/count` | なし | 存在 |
+| その他EDUコマンド | なし | `codebuilder`, `getspawnpoint`, `takepicture`, `ability`, `lesson`, `dialogue` 等 |
+
+→ **socket-be を土台にする前提が崩れた。[mcpews](https://github.com/mcpews/mcpews)（2026-08-01更新）の方が適切な可能性。socket-be の型定義自身が mcpews を `@link` で参照している（index.d.ts:161）。**
+
+## ★Microsoft公式 Code Connection API ドキュメント（archive.org で全文入手）
+「Code Builder for Minecraft: Education Edition — API Documentation」より返り値:
+- `inspect [direction]` → `[string blockName]`（例 `"coal_ore"`）※同文書内で `itemName` と表記揺れ
+- `inspectdata` → `[int data]`（airは0）／ `detect` → `[bool result]`
+- `fill ...` → `[int fillCount]` `[string blockName]`
+- **`testforblocks <begin> <end> <destination> [mode]` → `[int compareCount]` `[bool matches]`**（2領域の一括比較）
+- `clone ...` → `[int count]`
+- `getitemdetail/space/count` → `[string itemName]` / `[int spaceCount]` / `[int stackCount]`
+
+## DataRequest の type（調査項目への回答）
+**`block` / `item` / `mob` の3種のみ。ワールド内容を返す type は発見できず。**
+ただし型定義に `DataRequestPurpose<T> = 'data:${T}'` の汎用テンプレートがあり、他type の余地は残る（実在は未確認）。
+
+## 重要な注意
+- `https://mojang.github.io/bedrock-protocol-docs/` は**実在するが本件とは別物**。RakNetバイナリプロトコルの文書で、
+  `/connect ws://` の WebSocket プロトコル・DataRequest・agentコマンドは一切扱っていない
+- **Minecraft Education 公式サポートは「WebSocketを正式な外部APIとしてサポートする予定はなく、
+  正式なドキュメントを公開する予定もない」と表明。仕様が予告なく変わるリスクを設計に織り込むこと**
+
+## 参考にすべき実装（優先順）
+1. **mcpews** https://github.com/mcpews/mcpews — 全messagePurpose、AgentActionType、CommandVersion網羅。2026-08-01更新。`mitm`/`repl` をCLI同梱
+2. **mcwss** https://github.com/Sandertv/mcwss — `getchunkdata` の唯一の完全パーサ。ただし2020-07最終
+3. **bedrockws-deno** https://github.com/bedrock-ws/bedrockws-deno — 83イベントのzodスキーマ。2026-08-20更新
+4. **CodeConnectFix** https://github.com/lrocher/CodeConnectFix — MITM。実機フレームダンプの土台に最適
+5. **LeviLamina** https://github.com/LiteLDev/LeviLamina — 現行バイナリのシンボル。コマンド実在確認に最も信頼できる
+
+## 最優先の実機検証（1回の接続で1〜5が全部片付く）
+1. `getchunkdata overworld 0 0 100` の生JSONダンプ ← **最優先**
+2. その `data` 文字列を mcwss の `ParseChunkData` に通し既知地形と突合
+3. `getchunks overworld` のダンプ
+4. `action:agent` purpose で `inspect forward` → 2フレーム両方をダンプ（フィールド名確定）
+5. `agent inspect` を従来の `commandRequest` で送った場合の後方互換性
+→ **mcpews の `mitm` / `repl` をそのまま使うのが最短**
+
+---
+
+# ワールドファイル直接読み取りルート調査結果（2026-08-24）
+
+## ★`structure save ... disk` の保存先が特定された
+
+**LevelDB のキー `structuretemplate_<namespace>:<name>`（名前空間省略時 `mystructure:`）。
+値がそのまま `.mcstructure` のバイト列。** ファイルとしては現れない。
+
+根拠: `mcbe-leveldb-reader` の `extractStructureFilesFromLevelDbKeys` 実装
+（`structureKeyPrefix="structuretemplate_"` / `defaultNamespace="mystructure:"` がハードコード）。
+独立3ツール（destruc7i0n/extract-mcstructure, koukiBOBS/MCBEStructureExtractor, mcbe-structure-extract）が同じ前提。
+
+## 使えるライブラリ（npm で実在・バージョン確認済み）
+
+| パッケージ | ver | 最終公開 | 評価 |
+|---|---|---|---|
+| **mcbe-leveldb-reader** | 5.0.1 | **2026-08-15** | ◎本命。**純JS・ネイティブ依存なし**（`@zip.js/zip.js`, `pako` のみ）。Mojang公式 minecraft-creator-tools の抽出 |
+| **prismarine-nbt** | 2.8.0 | 2025-12-21 | ◎ `little` proto で `.mcstructure` を直接パース可 |
+| **prismarine-chunk** | 1.41.0 | 2026-07-31 | ◎ SubChunk デコーダが現役保守 |
+| minecraft-data | 3.113.2 | — | bedrock は **1.26.40 まで**存在を実行確認 |
+| @minecraft/creator-tools（Mojang公式） | 0.17.7 | 2026-08-02 | `mct` CLI。**worldサブコマンドにブロック読み取りは無い**。`renderstructure`/`buildstructure` あり |
+| bedrock-provider | 3.1.0 | 2024-06-25 | **leveldb-zlib必須＝ゲーム起動中は使用不可** |
+| leveldb-zlib | 1.2.0 | 2022-05-07 | Windows x64/Node24 の prebuild 同梱。**ただし排他ロックあり** |
+
+※ `mcstructure`（スコープなし）は **npm に存在しない**（404）
+
+## ★ロックの実測結果（Windows 11 / Node 24）
+- プロセスAが `leveldb-zlib` で open 中 → プロセスBの open は**失敗**（"別のプロセスが使用中"）
+- 同条件で プロセスBが `MANIFEST-*` / `*.log` / `*.ldb` を **`fs.readFile` → 成功**。
+  `mcbe-leveldb-reader` でのパースも成功しキー取得できた
+→ **純JSリーダ（LOCKを取らない読み取り専用）なら起動中でも読める可能性が高い**
+
+**未検証の危険**: LevelDBのコンパクション中は `.ldb` の生成/削除が走り、読み取り中に不整合が起こりうる
+（PapyrusCS issue #68 に同種の報告）。**db/ を一時ディレクトリへ丸ごとコピーしてから読む＋リトライ**を実装すべき。
+
+## ★最大の未確認リスク: フラッシュ遅延
+**Minecraft(EDU)がブロック変更をいつ `db/` に書くかが不明。**
+即時なら実用。オートセーブ待ち／ワールド退出時なら**「リアルタイム観測」には使えず「事後解析」限定**になる。
+※ BDS には `/save hold` → `/save query` → `/save resume` があるが、Microsoft Learn は
+「This command is for use on a dedicated server only.」と明記。**EDUクライアントでの可否は未確認。**
+
+## Education Edition のワールド保存場所（公式サポート記事より、インストール形態で2系統）
+| 形態 | パス |
+|---|---|
+| デスクトップ版(.exe) | `%APPDATA%\Minecraft Education Edition\games\com.mojang\minecraftWorlds` |
+| Microsoft Store版(UWP) | `%LOCALAPPDATA%\Packages\Microsoft.MinecraftEducationEdition_8wekyb3d8bbwe\LocalState\games\com.mojang\minecraftWorlds` |
+| macOS | `~/Library/Application Support/minecraftpe/games/com.mojang` |
+
+- 通常Bedrockは `Microsoft.MinecraftUWP_8wekyb3d8bbwe`。**PFNが違うので流用不可**
+- **フォルダ名はGUID**。`levelname.txt` を読んで突き合わせる必要あり
+
+## フォーマット要点
+- **LevelDBキー**: `LE i32 chunkX | LE i32 chunkZ | (dim≠0なら LE i32 dim) | tag(1byte) | (tag=47なら subchunk index)`
+  主タグ: 43 Data3D / 45 Data2D / **47 SubChunkPrefix** / 49 BlockEntity / 50 Entity / 54 FinalizedState / **56 BorderBlocks(EDU専用)**
+- **SubChunk(47)**: version(1|8|9) → storageCount → (v9のみ)subChunkIndex → 各レイヤ{paletteHeader(bit0=runtimeIDフラグ, >>1=bitsPerBlock), uint32LEワード列, **int32LE paletteSize（ディスク時。ネットワーク時はZigZag VarInt）**, LE NBT compound×paletteSize}。インデックスはXZY順
+- **.mcstructure**: **無圧縮リトルエンディアンNBT**（Javaのgzip+BEと異なる）。
+  `format_version` / `size` / `structure_world_origin` / `structure.block_indices`（2レイヤ、**-1は「ブロックなし」**）/ `structure.entities` / `palette.default.block_palette` / `palette.default.block_position_data`。
+  インデックス→座標は **ZYX順**: `i = SZ*SY*X + SZ*Y + Z`
+
+## 推奨実装（担当の第一候補）
+`/structure save <name> <from> <to> disk` を WebSocket 経由で実行
+→ `db/` を一時コピー → `mcbe-leveldb-reader` で `structuretemplate_mystructure:<name>` を取得
+→ `prismarine-nbt` の `little` でパース → block_indices × block_palette で解決
+→ `structure delete` で後始末
+
+**理由**: ブロックパレットのビット詰め・バージョン差異を自前で扱わずに済む。読む範囲をコマンドで指定できチャンク境界に縛られない。
+**欠点**: `/structure save` の体積上限が公式コマンド仕様に記載なし（ストラクチャーブロックUIの64×384×64が適用されるかは未確認）
+
+## この経路の構造的制約（確定）
+**MCPサーバが Minecraft と同一マシン必須。** WebSocket制御はネットワーク越しで動くのに、この経路だけローカル限定。
+**アーキテクチャ上の非対称性として設計に明記すること。**
+
+## 実機検証項目
+1. **ブロック変更が `db/` に書かれるまでの遅延**（最重要。設置→`db/*.log`のmtime/サイズ監視）
+2. `/structure save ... disk` 直後に `structuretemplate_` キーが読めるか
+3. EDU起動中に `db/` の生ファイルを fs で読めるか（今回の実験は leveldb-zlib のビルドでの結果。Minecraft本体のopenフラグは不明）
+4. EDUのインストール形態と実パス（`levelname.txt` 確認）
+5. `/save hold` `/save query` が EDU クライアントで使えるか
+6. `/structure save` の最大体積上限
+
+---
+
+# 【最重要】先行事例調査結果（2026-08-24）— 完成した実装が存在する
+
+## ★chapmanjw の3リポジトリ構成が完成解
+
+**https://github.com/chapmanjw/minecraft-bedrock-mcp-server**（★6 / 2026-08-14 / **MIT** / TS）
+**https://github.com/chapmanjw/minecraft-bedrock-mcp-behavior-pack**（★2 / 2026-07-15 / MIT / TS）
+
+```
+MCPクライアント --MCP Streamable HTTP+Bearer--> MCPサーバ(Node)
+    --HTTP long-poll+Bearer--> ビヘイビアパック(BDS内) --@minecraft/server--> ワールド
+```
+- ツール呼び出しをサーバ側キューに積み、パックが `GET /bridge/poll` でロングポーリング取得 → Script API 実行 → `POST /bridge/result`
+- イベントは `POST /bridge/event` にバッチ送信。起動時ハンドシェイクでプロトコルバージョン交渉、スクリプトリロード時にイベント購読を再武装
+
+**ツール設計: 78個・1ツール1機能（action分岐なし）**
+block 8 / world 10 / entity 12 / player 11 / structure 8 / structure_file 4 / scoreboard 7 / event 4 / inventory 4 / property 4 / server 3 / effect 2 / command 1
+MCP SDK `^1.29.0` + `zod ^3.23.8`、`inputShape` に Zod 直書き、Streamable HTTP + Bearer
+
+**領域一括読み取りの実装**（`src/dispatcher/handlers/block-handlers.ts`）— 我々に最も効く:
+```
+PAGE_SIZE = 1024          // 1ページで返すマッチブロック数
+MAX_SCAN_PER_PAGE = 16384 // 1ページの最大スキャン数
+YIELD_INTERVAL = 2048     // ジェネレータの yield 間隔
+```
+- `ctx.scheduler.runJob(function* collect(){...})` で `system.runJob` に流し 2048ブロックごとに yield
+- **`cursor` 文字列（線形インデックス）でページング** → LLMが続きを要求できる
+- `filter.include` / `filter.exclude` で typeId フィルタ（空気除外で転送量削減）
+- `getBlockSafe()` は未ロードチャンクの例外を握りつぶし `undefined`
+- `mc_structure_create_from_world` / `mc_structure_file_read`（.mcstructure を base64 で返す）も MCPツール化
+
+**警告（README に明記）**: `@minecraft/server-net` / `@minecraft/server-admin` は **beta モジュールで代替なしに打ち切られうる**。BDSのバージョンをピン留めし自動更新するな。
+**前提**: BDS（または Education 専用サーバ）が必須。クライアント単体の `/connect` では使えない。
+
+## ★WebSocket経路で観測を解いた先行事例は「存在しない」（重要な確証）
+
+Bedrock を WebSocket 制御する MCP サーバは3件のみ:
+| | 観測 |
+|---|---|
+| Mming-Lab/minecraft-bedrock-education-mcp（本件） | `get_top_solid_block` / `query_block_data` のみ |
+| nchiari/minecraft-ai-bot-server（★0 / 2026-05-01） | 本件の派生。**新規性なし** |
+| ando-front/minecraft-bedrock-mcp（★0 / Python） | **観測ツール無し＝断念** |
+
+`p0t4t0sandwich/minecraft-be-websocket-api`（★23）も観測なし。
+**WebSocket経路の実装者は一様に観測を諦めている。**
+
+- glama.ai の Minecraft MCP 約20件に **Bedrock/Education 対応は1件も無い**（全て Java/Mineflayer/RCON）
+- npm に **Bedrock WebSocket系の MCP パッケージは公開されていない**
+- modelcontextprotocol/servers 公式リスト、awesome-mcp-servers 系にも Minecraft エントリなし
+
+## ★訂正: `getchunkdata` の返り値は未確定（2名の報告が食い違う）
+
+| 報告者 | 主張 | 根拠 |
+|---|---|---|
+| プロトコル担当 | ブロックIDつき高さマップ | minecraft.wiki の現行記述 |
+| 先行事例担当 | **「色(RGB24)+高さ」でありブロックIDではない** | mcwss `chunk_data.go` の実装コードとコメント |
+
+さらに **mcwss の `ChunkDataRequest` は定義されているだけで `player.go`/`agent.go` から呼ばれていない**（grep確認）。
+**動作実績のある実装は存在しない。** 「垂直方向の中身は読めずトップダウン地図相当」の可能性があり、
+**実機で叩くまで期待値を上げないこと。**
+
+## socket-be の現状
+`tutinoko2048/SocketBE` ★33 / 2026-07-19 / **v2.6.0**（本件は `^2.3.1` — 3マイナー遅れ）
+`getTopSolidBlock()` は実装済みで本件も `src/tools/core/blocks.ts:151` で使用中。
+
+## ★依頼者自身の既存資産（この問題に直結）
+- **https://github.com/Mming-Lab/minecraft-education-server-docker**（★1 / **2026-08-23**）
+  → chapmanjw 方式に必要な **Education専用サーバの土台が既にある**
+- **https://github.com/Mming-Lab/makecode-minecraft-numeric-blocks**（★1 / 2026-03-18）
+  「エージェントがブロックを検査して異なる色の羊毛から数値(0-9)を取得」
+  → **観測手段の乏しさを回避するために自作された道具**。MakeCode界隈の標準的ワークアラウンド
+
+## MakeCode の実態（訂正）
+**MakeCode 公式リファレンスに「座標のブロックを取得する」ブロックは存在しない。**
+あるのは `blocks.testForBlock`（真偽値）/ `testForBlocks`（領域一致の真偽値）のみ。
+※ Code Connection API 公式ドキュメントは `inspect [direction] → [string blockName]` と記載しているが、
+MakeCode のブロックパレットに露出しているかは**未確認**。
+
+**TheBeems/pxt-worldBuilder `src/01-search.ts` が最良の回避実装**:
+`testForBlock` の真偽値だけで、**指数探索で範囲を絞り→二分探索で境界確定**して地形高さを求める。`O(log n)` 回で済む。
+→ `gettopsolidblock` が使えない状況（オーバーハング下、洞窟内）の補完に使える。
+
+## Java版から学ぶべきツール表面設計
+**ChangingSelf/maicraft-mcp-server の `QueryAreaBlocksAction`（391行）が最も練られている**:
+```ts
+startX/Y/Z, endX/Y/Z, useRelativeCoords?, maxBlocks?,
+compressionMode?      // ★ブロック種別でグループ化 {name, count, positions[]}
+includeBlockCounts?,
+filterInvisibleBlocks? // ★視線が通らないブロックを除外
+```
+**空気を除外・種別でグループ化・視線で間引く**の3段削減が、LLMに渡すトークン量を実用域に収める鍵。
+
+## 「できない」記録（確定した制約）
+1. **`/data` は Java 限定** → コマンドでブロック/エンティティのNBTを読むのは不可
+2. `/testforblock` は問い合わせ用途に使えない（対象IDを引数で与える必要）
+3. `/gettopsolidblock` `/getchunkdata` は**ほぼ未文書化**（wiki自身が「情報が非常に少ない」と記載）
+   → 「できない」ではなく**「知られていない」タイプ。好材料**
+4. **Education は Java/Bedrock と非互換**。→ `bedrock-protocol` クライアント経路は Education に使えない可能性が高い
+5. `server-net` / `server-admin` は **beta で消滅しうる**（手法A最大のリスク）
+
+## 手法Bの部品（参考・Educationでは不可の可能性）
+`PrismarineJS/bedrock-protocol` ★464 / 2026-08-23（活発、npm 3.58.3）
+`PrismarineJS/prismarine-chunk` ★70 / 2026-07-31 — `CommonChunkColumn.js` に `getBlock/getBlockStateId/getBlocks/getBlockEntity` 実装済み
+→ **「Bedrock版 Mineflayer」の部品は揃っている**が、①別プレイヤーとして参加が必要 ②Educationは認証系が別で接続不可の可能性

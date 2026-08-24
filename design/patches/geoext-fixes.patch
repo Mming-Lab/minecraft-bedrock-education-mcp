@@ -1,0 +1,904 @@
+diff --git a/harness/.gitignore b/harness/.gitignore
+new file mode 100644
+index 0000000..a2aa0bb
+--- /dev/null
++++ b/harness/.gitignore
+@@ -0,0 +1 @@
++harness/built/
+diff --git a/harness/apply-fixes.mjs b/harness/apply-fixes.mjs
+new file mode 100644
+index 0000000..e6fa0c7
+--- /dev/null
++++ b/harness/apply-fixes.mjs
+@@ -0,0 +1,144 @@
++// Applies the geometry fixes to src/coordinates.ts. Each replacement asserts that its
++// anchor text is present exactly once, so a silent no-op is impossible.
++
++import fs from 'node:fs';
++
++const FILE = new URL('../src/coordinates.ts', import.meta.url);
++const CRLF = '\r\n';
++const LF = '\n';
++
++const raw = fs.readFileSync(FILE, 'utf8');
++// The file is stored with CRLF; normalise so the anchors below can be written with LF.
++const usedCrlf = raw.indexOf(CRLF) !== -1;
++let src = raw.split(CRLF).join(LF);
++
++function replaceOnce(label, find, replace) {
++  const count = src.split(find).length - 1;
++  if (count !== 1) {
++    throw new Error(`[${label}] anchor matched ${count} times, expected exactly 1`);
++  }
++  src = src.replace(find, replace);
++  console.log(`  applied: ${label}`);
++}
++
++// --- Fix A: hollow circle emitted every 8-way reflection unconditionally ---------------
++// On the axes (y === 0) and on the diagonal (x === y) several reflections land on the same
++// coordinate, so every hollow circle contained duplicates (50% at r=1, 7.1% at r=10).
++replaceOnce(
++  'A: hollow circle 8-way symmetry duplicates',
++  `                // 8方向の対称点を追加
++                positions.push(toWorld(x, y));
++                positions.push(toWorld(y, x));
++                positions.push(toWorld(-y, x));
++                positions.push(toWorld(-x, y));
++                positions.push(toWorld(-x, -y));
++                positions.push(toWorld(-y, -x));
++                positions.push(toWorld(y, -x));
++                positions.push(toWorld(x, -y));`,
++  `                // 8方向の対称点を追加。
++                // 軸上 (y === 0) と対角線上 (x === y) では反射像が元の点と重なるため、
++                // 重複を生まないよう条件付きで追加する。
++                positions.push(toWorld(x, y));
++                if (y !== 0) positions.push(toWorld(x, -y));
++                if (x !== 0) positions.push(toWorld(-x, y));
++                if (x !== 0 && y !== 0) positions.push(toWorld(-x, -y));
++
++                if (x !== y) {
++                    positions.push(toWorld(y, x));
++                    if (x !== 0) positions.push(toWorld(y, -x));
++                    if (y !== 0) positions.push(toWorld(-y, x));
++                    if (x !== 0 && y !== 0) positions.push(toWorld(-y, -x));
++                }`
++);
++
++// --- Fix B1: hyperboloid divided by the waist radius -----------------------------------
++// r(t) = a * sqrt(1 + (t*b/a)^2) is undefined at a = 0: the term becomes 0 * Infinity =
++// NaN, the loop bounds become NaN, and the function returns an empty array with no error.
++// sqrt(a^2 + (t*b)^2) is algebraically identical for a > 0 and well-defined at a = 0,
++// where it degenerates into the expected double cone.
++replaceOnce(
++  'B1: hyperboloid radius formula (removes division by waist radius)',
++  `            // 双曲面の方程式: r(t) = a * sqrt(1 + (t*b/a)²)
++            const currentRadius = a * Math.sqrt(1 + (t * b / a) * (t * b / a));`,
++  `            // 双曲面の方程式: r(t) = a * sqrt(1 + (t*b/a)²) = sqrt(a² + (t*b)²)
++            // 後者は a = 0（くびれ半径ゼロ）でも定義され、二重円錐に退化する。
++            const currentRadius = Math.sqrt(a * a + (t * b) * (t * b));`
++);
++
++// --- Fix B2: hyperboloid divided by halfHeight ----------------------------------------
++// height = 1 makes halfHeight 0, so t = 0 / 0 = NaN and the function returns empty.
++// A single-layer hyperboloid should sit at the waist, which t = 0 gives.
++replaceOnce(
++  'B2: hyperboloid halfHeight divisor (height = 1)',
++  `        for (let y = 0; y < heightInt; y++) {
++            // 中心からの距離 (-1 to 1 の範囲)
++            const t = (y - halfHeight) / halfHeight;`,
++  `        // height が 1 のとき halfHeight が 0 になり t が NaN になるのを防ぐ。
++        // 除数を 1 にすると単層は t = 0、すなわちくびれ位置に置かれる。
++        const halfHeightDivisor = halfHeight > 0 ? halfHeight : 1;
++
++        for (let y = 0; y < heightInt; y++) {
++            // 中心からの距離 (-1 to 1 の範囲)
++            const t = (y - halfHeight) / halfHeightDivisor;`
++);
++
++// --- Fix C: paraboloid divided by the height ------------------------------------------
++// focalLength = radiusSquared / (4 * heightInt) is Infinity at heightInt = 0, and
++// 4 * Infinity * 0 is NaN, so the function returned empty without reporting anything.
++// Substituting focalLength back in cancels the 4 and leaves a single division, which is
++// then guarded.
++replaceOnce(
++  'C: paraboloid focal length (removes intermediate Infinity)',
++  `        // パラボロイドの方程式: z = (x² + y²) / (4 * focal_length)
++        // focal_lengthを調整してheightに合わせる
++        const focalLength = radiusSquared / (4 * heightInt);
++
++        for (let y = 0; y < heightInt; y++) {
++            // 現在の高さでのパラボラ半径を計算
++            const currentRadiusSquared = 4 * focalLength * y;`,
++  `        // 高さが 1 未満では焦点距離が定義できない（0 除算で Infinity になる）。
++        if (heightInt < 1) {
++            return positions;
++        }
++
++        // パラボロイドの方程式: z = (x² + y²) / (4 * focal_length)
++        // focal_length = radiusSquared / (4 * heightInt) を代入すると 4 が相殺され、
++        // currentRadiusSquared = radiusSquared * y / heightInt となる。
++        // 中間値として Infinity を作らないぶん安全。
++        for (let y = 0; y < heightInt; y++) {
++            // 現在の高さでのパラボラ半径を計算
++            const currentRadiusSquared = (radiusSquared * y) / heightInt;`
++);
++
++// --- Fix D: low-precision PI ----------------------------------------------------------
++// 3.14159 is accurate to 6 digits. At the documented maximum radius of 200 the resulting
++// angular error moves a point by ~0.004 blocks, which rounding discards, so this was not
++// producing wrong output — but there is no reason not to use the exact value.
++replaceOnce(
++  'D: MATH_CONSTANTS uses Math.PI',
++  `    /** 数学定数 */
++    const MATH_CONSTANTS = {
++        PI: 3.14159,
++        TWO_PI: 2 * 3.14159
++    };`,
++  `    /** 数学定数 */
++    const MATH_CONSTANTS = {
++        PI: Math.PI,
++        TWO_PI: 2 * Math.PI
++    };`
++);
++
++// --- Fix E: helix step count could be zero ---------------------------------------------
++// radius = 0 and height = 0 together make helixLength 0, so steps is 0 and progress
++// becomes 0 / 0 = NaN. The coordinates are then rejected by validateCoordinates and the
++// result is silently empty. Clamping to at least one step keeps the degenerate case honest.
++replaceOnce(
++  'E: helix minimum step count',
++  `        const steps = Math.max(heightInt * 2, Math.round(helixLength)); // 連続性を保つ密度`,
++  `        // 半径と高さがともに 0 だと helixLength も 0 になり、progress が 0 / 0 = NaN になる。
++        // 最低 1 ステップを保証して NaN の伝播を防ぐ。
++        const steps = Math.max(1, Math.max(heightInt * 2, Math.round(helixLength))); // 連続性を保つ密度`
++);
++
++fs.writeFileSync(FILE, usedCrlf ? src.split(LF).join(CRLF) : src, 'utf8');
++console.log('\nsrc/coordinates.ts updated');
+diff --git a/harness/apply-fixes2.mjs b/harness/apply-fixes2.mjs
+new file mode 100644
+index 0000000..50d9c14
+--- /dev/null
++++ b/harness/apply-fixes2.mjs
+@@ -0,0 +1,65 @@
++// Second round of geometry fixes. Same all-or-nothing anchoring as apply-fixes.mjs.
++import fs from 'node:fs';
++
++const CRLF = '\r\n';
++const LF = '\n';
++const FILE = new URL('../src/coordinates.ts', import.meta.url);
++const raw = fs.readFileSync(FILE, 'utf8');
++const usedCrlf = raw.indexOf(CRLF) !== -1;
++let src = raw.split(CRLF).join(LF);
++
++function replaceOnce(label, find, replace) {
++  const count = src.split(find).length - 1;
++  if (count !== 1) throw new Error(`[${label}] anchor matched ${count} times, expected exactly 1`);
++  src = src.replace(find, replace);
++  console.log(`  applied: ${label}`);
++}
++
++// --- Fix F: midpoint circle stepped x down one iteration too early --------------------
++// The two independent `if` branches decide on `err` before and after it is updated, which
++// drops x a step early. At r = 10 that put (8,4) on the ring at distance 8.944 instead of
++// the correct (9,4) at 9.849 - over a block inside the intended radius.
++// This is the textbook form: advance y, update the error, then decide about x.
++replaceOnce(
++  'F: midpoint circle error stepping',
++  `                if (err <= 0) {
++                    y += 1;
++                    err += 2 * y + 1;
++                }
++                if (err > 0) {
++                    x -= 1;
++                    err -= 2 * x + 1;
++                }`,
++  `                // 標準形の中点円: y を進め、誤差を更新してから x を判定する。
++                // 誤差の判定を更新前後で二度行うと x が 1 ステップ早く減り、
++                // 半径から 1 ブロック以上ずれた点が出る。
++                y += 1;
++                err += 1 + 2 * y;
++                if (2 * (err - x) + 1 > 0) {
++                    x -= 1;
++                    err += 1 - 2 * x;
++                }`
++);
++
++// --- Fix G: baseRadius did not produce the base radius --------------------------------
++// With b = baseRadius - waistRadius the profile r(t) = sqrt(a^2 + (t*b)^2) reaches
++// sqrt(a^2 + b^2) at the ends, not baseRadius. base=6 waist=3 gave a maximum radius of 4
++// and a nearly cylindrical shape. Solving sqrt(a^2 + b^2) = baseRadius for b makes the
++// parameter mean what its name says.
++replaceOnce(
++  'G: hyperboloid base radius parameterisation',
++  `        // 双曲面の形状パラメータ
++        const a = waistRadiusInt; // 最小半径
++        const b = baseRadiusInt - waistRadiusInt; // 半径の変化幅`,
++  `        // 双曲面の形状パラメータ
++        const a = waistRadiusInt; // 最小半径（t = 0 での半径）
++        // 端 (t = ±1) の半径が baseRadius と一致するよう b を決める。
++        // r(t) = sqrt(a² + (t*b)²) なので sqrt(a² + b²) = baseRadius を b について解く。
++        // baseRadius が waistRadius 以下の形状はこの式では表せないため円柱に落とす。
++        const b = baseRadiusInt > waistRadiusInt
++            ? Math.sqrt(baseRadiusInt * baseRadiusInt - waistRadiusInt * waistRadiusInt)
++            : 0;`
++);
++
++fs.writeFileSync(FILE, usedCrlf ? src.split(LF).join(CRLF) : src, 'utf8');
++console.log('\nsrc/coordinates.ts updated');
+diff --git a/harness/probe.ts b/harness/probe.ts
+new file mode 100644
+index 0000000..925aa3d
+--- /dev/null
++++ b/harness/probe.ts
+@@ -0,0 +1,16 @@
++const ring = coordinates.getCirclePositions(world(0, 0, 0), 10, Axis.Y, true);
++console.log('r=10 hollow, count =', ring.length);
++const off: string[] = [];
++for (const p of ring) {
++  const x = p.getValue(Axis.X), z = p.getValue(Axis.Z);
++  const d = Math.sqrt(x * x + z * z);
++  if (Math.abs(d - 10) > 1.0) off.push(`(${x},${z}) d=${d.toFixed(3)}`);
++}
++console.log('off-ring points:', off.length);
++console.log(off.join('  '));
++
++console.log('\n--- hyperboloid base=6 waist=3 h=11: radius per layer ---');
++const h = coordinates.getHyperboloidPositions(world(0, 0, 0), 6, 3, 11);
++const w: { [y: number]: number } = {};
++for (const p of h) { const y = p.getValue(Axis.Y); w[y] = Math.max(w[y] || 0, Math.abs(p.getValue(Axis.X))); }
++for (let y = 0; y < 11; y++) console.log(`  y=${y}  maxRadius=${w[y]}`);
+diff --git a/harness/run.ts b/harness/run.ts
+new file mode 100644
+index 0000000..c7223fa
+--- /dev/null
++++ b/harness/run.ts
+@@ -0,0 +1,394 @@
++// Runs every exported coordinate function over a parameter matrix and reports which
++// invariants each case violates. Detection only: no fixes are applied here.
++//
++//   npx tsc -p harness && node harness/built/harness/run.js
++
++const WORLD = { X_MIN: -30000000, X_MAX: 30000000, Y_MIN: -64, Y_MAX: 320, Z_MIN: -30000000, Z_MAX: 30000000 };
++
++interface Violation {
++  fn: string;
++  args: string;
++  kind: string;
++  detail: string;
++}
++
++const violations: Violation[] = [];
++let checked = 0;
++
++function key(p: Position): string {
++  return `${p.getValue(Axis.X)},${p.getValue(Axis.Y)},${p.getValue(Axis.Z)}`;
++}
++
++/**
++ * @param expectEmpty true when an empty result is the documented answer for this input,
++ *                    so "valid input produced nothing" is not reported.
++ */
++function check(fn: string, args: string, result: Position[], expectEmpty = false): void {
++  checked++;
++
++  if (!result) {
++    violations.push({ fn, args, kind: 'NULL', detail: 'returned null/undefined' });
++    return;
++  }
++
++  if (result.length === 0 && !expectEmpty) {
++    violations.push({ fn, args, kind: 'EMPTY', detail: 'valid input produced no positions' });
++    return;
++  }
++
++  let nonFinite = 0;
++  let nonInteger = 0;
++  let outOfBounds = 0;
++  const seen: { [k: string]: number } = {};
++  let duplicates = 0;
++  let firstBad = '';
++
++  for (const p of result) {
++    const x = p.getValue(Axis.X);
++    const y = p.getValue(Axis.Y);
++    const z = p.getValue(Axis.Z);
++
++    if (!isFinite(x) || !isFinite(y) || !isFinite(z)) {
++      nonFinite++;
++      if (!firstBad) firstBad = key(p);
++      continue;
++    }
++    if (x !== Math.floor(x) || y !== Math.floor(y) || z !== Math.floor(z)) {
++      nonInteger++;
++      if (!firstBad) firstBad = key(p);
++    }
++    if (
++      x < WORLD.X_MIN || x > WORLD.X_MAX ||
++      y < WORLD.Y_MIN || y > WORLD.Y_MAX ||
++      z < WORLD.Z_MIN || z > WORLD.Z_MAX
++    ) {
++      outOfBounds++;
++      if (!firstBad) firstBad = key(p);
++    }
++
++    const k = key(p);
++    seen[k] = (seen[k] || 0) + 1;
++    if (seen[k] === 2) duplicates++;
++  }
++
++  if (nonFinite) violations.push({ fn, args, kind: 'NaN/Inf', detail: `${nonFinite}/${result.length} non-finite, first ${firstBad}` });
++  if (nonInteger) violations.push({ fn, args, kind: 'NON_INTEGER', detail: `${nonInteger}/${result.length} non-integer, first ${firstBad}` });
++  if (outOfBounds) violations.push({ fn, args, kind: 'OUT_OF_BOUNDS', detail: `${outOfBounds}/${result.length} outside world bounds, first ${firstBad}` });
++  if (duplicates) {
++    const pct = ((duplicates / result.length) * 100).toFixed(1);
++    violations.push({ fn, args, kind: 'DUPLICATE', detail: `${duplicates} duplicated coords of ${result.length} (${pct}%)` });
++  }
++}
++
++function safe(fn: string, args: string, run: () => Position[], expectEmpty = false): void {
++  try {
++    check(fn, args, run(), expectEmpty);
++  } catch (error: any) {
++    violations.push({ fn, args, kind: 'THROW', detail: String(error && error.message ? error.message : error) });
++  }
++}
++
++const C = world(0, 0, 0);
++const c = coordinates;
++
++// --- sphere: density pinned to 1.0, since lower values sample with Math.random() ---
++for (const r of [1, 2, 5, 10]) {
++  safe('getSpherePositions', `r=${r}`, () => c.getSpherePositions(C, r, false, 1.0));
++  safe('getSpherePositions', `r=${r} hollow`, () => c.getSpherePositions(C, r, true, 1.0));
++}
++safe('getSpherePositions', 'r=2.5 (non-integer)', () => c.getSpherePositions(C, 2.5, false, 1.0));
++safe('getSpherePositions', 'r=0', () => c.getSpherePositions(C, 0, false, 1.0), true);
++safe('getSpherePositions', 'r=-1', () => c.getSpherePositions(C, -1, false, 1.0), true);
++
++// --- cuboid ---
++safe('getCuboidPositions', '0,0,0..3,3,3', () => c.getCuboidPositions(world(0, 0, 0), world(3, 3, 3)));
++safe('getCuboidPositions', 'hollow', () => c.getCuboidPositions(world(0, 0, 0), world(3, 3, 3), true));
++safe('getCuboidPositions', 'reversed corners', () => c.getCuboidPositions(world(3, 3, 3), world(0, 0, 0)));
++safe('getCuboidPositions', 'degenerate (same corner)', () => c.getCuboidPositions(world(0, 0, 0), world(0, 0, 0)));
++
++// --- cylinder / cone ---
++for (const [r, h] of [[3, 5], [1, 1], [5, 10]]) {
++  safe('getCylinderPositions', `r=${r} h=${h}`, () => c.getCylinderPositions(C, r, h));
++  safe('getCylinderPositions', `r=${r} h=${h} hollow`, () => c.getCylinderPositions(C, r, h, true));
++  safe('getConePositions', `r=${r} h=${h}`, () => c.getConePositions(C, r, h));
++  safe('getConePositions', `r=${r} h=${h} hollow`, () => c.getConePositions(C, r, h, true));
++}
++safe('getCylinderPositions', 'h=0', () => c.getCylinderPositions(C, 3, 0), true);
++safe('getConePositions', 'h=0', () => c.getConePositions(C, 3, 0), true);
++
++// --- torus ---
++for (const [R, r] of [[8, 3], [5, 2], [3, 1]]) {
++  safe('getTorusPositions', `R=${R} r=${r}`, () => c.getTorusPositions(C, R, r));
++  safe('getTorusPositions', `R=${R} r=${r} hollow`, () => c.getTorusPositions(C, R, r, true));
++}
++safe('getTorusPositions', 'R=3 r=0', () => c.getTorusPositions(C, 3, 0), true);
++safe('getTorusPositions', 'R=0 r=3', () => c.getTorusPositions(C, 0, 3));
++
++// --- ellipsoid ---
++safe('getEllipsoidPositions', '3,4,5', () => c.getEllipsoidPositions(C, 3, 4, 5));
++safe('getEllipsoidPositions', '3,4,5 hollow', () => c.getEllipsoidPositions(C, 3, 4, 5, true));
++safe('getEllipsoidPositions', 'rz=0', () => c.getEllipsoidPositions(C, 3, 3, 0), true);
++safe('getEllipsoidPositions', 'all 1', () => c.getEllipsoidPositions(C, 1, 1, 1));
++
++// --- line ---
++safe('getLinePositions', '(0,0,0)->(10,5,3)', () => c.getLinePositions(world(0, 0, 0), world(10, 5, 3)));
++safe('getLinePositions', 'same point', () => c.getLinePositions(world(0, 0, 0), world(0, 0, 0)));
++safe('getLinePositions', 'negative direction', () => c.getLinePositions(world(5, 5, 5), world(-5, -5, -5)));
++
++// --- helix ---
++for (const [r, h, t] of [[3, 10, 2], [5, 20, 4]]) {
++  safe('getHelixPositions', `r=${r} h=${h} turns=${t}`, () => c.getHelixPositions(C, r, h, t));
++}
++safe('getHelixPositions', 'radius=0', () => c.getHelixPositions(C, 0, 10, 3), true);
++safe('getHelixPositions', 'turns=0', () => c.getHelixPositions(C, 3, 10, 0), true);
++safe('getHelixPositions', 'height=0', () => c.getHelixPositions(C, 3, 0, 3), true);
++
++// --- paraboloid ---
++for (const [r, h] of [[5, 10], [3, 5]]) {
++  safe('getParaboloidPositions', `r=${r} h=${h}`, () => c.getParaboloidPositions(C, r, h));
++  safe('getParaboloidPositions', `r=${r} h=${h} hollow`, () => c.getParaboloidPositions(C, r, h, true));
++}
++safe('getParaboloidPositions', 'h=0', () => c.getParaboloidPositions(C, 5, 0), true);
++safe('getParaboloidPositions', 'h=1', () => c.getParaboloidPositions(C, 5, 1));
++safe('getParaboloidPositions', 'r=0', () => c.getParaboloidPositions(C, 0, 5), true);
++
++// --- hyperboloid ---
++safe('getHyperboloidPositions', 'base=5 waist=2 h=10', () => c.getHyperboloidPositions(C, 5, 2, 10));
++safe('getHyperboloidPositions', 'base=4 waist=4 h=5 (odd h)', () => c.getHyperboloidPositions(C, 4, 4, 5));
++safe('getHyperboloidPositions', 'h=0', () => c.getHyperboloidPositions(C, 5, 2, 0), true);
++safe('getHyperboloidPositions', 'waist=0', () => c.getHyperboloidPositions(C, 5, 0, 10));
++
++// --- circle ---
++for (const axis of [Axis.X, Axis.Y, Axis.Z]) {
++  safe('getCirclePositions', `r=5 axis=${axis}`, () => c.getCirclePositions(C, 5, axis));
++  safe('getCirclePositions', `r=5 axis=${axis} hollow`, () => c.getCirclePositions(C, 5, axis, true));
++}
++safe('getCirclePositions', 'r=0', () => c.getCirclePositions(C, 0, Axis.Y), true);
++
++// --- bezier ---
++safe('getVariableBezierCurvePositions', '1 control point', () =>
++  c.getVariableBezierCurvePositions(world(0, 0, 0), [world(5, 10, 0)], world(10, 0, 0)));
++safe('getVariableBezierCurvePositions', 'no control points', () =>
++  c.getVariableBezierCurvePositions(world(0, 0, 0), [], world(10, 0, 0)));
++safe('getVariableBezierCurvePositions', '30 control points (overflow probe)', () => {
++  const cps: Position[] = [];
++  for (let i = 0; i < 30; i++) cps.push(world(i, i % 5, 0));
++  return c.getVariableBezierCurvePositions(world(0, 0, 0), cps, world(40, 0, 0));
++});
++safe('getVariableBezierCurvePositions', '200 control points (overflow probe)', () => {
++  const cps: Position[] = [];
++  for (let i = 0; i < 200; i++) cps.push(world(i, i % 7, 0));
++  return c.getVariableBezierCurvePositions(world(0, 0, 0), cps, world(210, 0, 0));
++});
++
++// --- hollow containment: hollow output must be a subset of the solid output ---
++function subsetCheck(fn: string, args: string, solid: Position[], hollow: Position[]): void {
++  checked++;
++  const set: { [k: string]: boolean } = {};
++  for (const p of solid) set[key(p)] = true;
++  let outside = 0;
++  for (const p of hollow) if (!set[key(p)]) outside++;
++  if (outside) {
++    violations.push({ fn, args, kind: 'HOLLOW_NOT_SUBSET', detail: `${outside}/${hollow.length} hollow coords absent from solid` });
++  }
++}
++subsetCheck('getSpherePositions', 'r=5', c.getSpherePositions(C, 5, false, 1.0), c.getSpherePositions(C, 5, true, 1.0));
++subsetCheck('getTorusPositions', 'R=8 r=3', c.getTorusPositions(C, 8, 3), c.getTorusPositions(C, 8, 3, true));
++subsetCheck('getEllipsoidPositions', '3,4,5', c.getEllipsoidPositions(C, 3, 4, 5), c.getEllipsoidPositions(C, 3, 4, 5, true));
++subsetCheck('getCylinderPositions', 'r=3 h=5', c.getCylinderPositions(C, 3, 5), c.getCylinderPositions(C, 3, 5, true));
++
++// --- translation equivariance: f(center + d) == f(center) + d ---
++function equivarianceCheck(fn: string, at0: Position[], at100: Position[], dx: number, dy: number, dz: number): void {
++  checked++;
++  if (at0.length !== at100.length) {
++    violations.push({ fn, args: 'translation', kind: 'NOT_EQUIVARIANT', detail: `count differs: ${at0.length} vs ${at100.length}` });
++    return;
++  }
++  const shifted: { [k: string]: boolean } = {};
++  for (const p of at0) shifted[`${p.getValue(Axis.X) + dx},${p.getValue(Axis.Y) + dy},${p.getValue(Axis.Z) + dz}`] = true;
++  let missing = 0;
++  for (const p of at100) if (!shifted[key(p)]) missing++;
++  if (missing) violations.push({ fn, args: 'translation', kind: 'NOT_EQUIVARIANT', detail: `${missing}/${at100.length} coords do not match the shifted set` });
++}
++equivarianceCheck('getSpherePositions', c.getSpherePositions(world(0, 0, 0), 5, false, 1.0), c.getSpherePositions(world(100, 70, -40), 5, false, 1.0), 100, 70, -40);
++equivarianceCheck('getTorusPositions', c.getTorusPositions(world(0, 0, 0), 6, 2), c.getTorusPositions(world(100, 70, -40), 6, 2), 100, 70, -40);
++equivarianceCheck('getCylinderPositions', c.getCylinderPositions(world(0, 0, 0), 4, 6), c.getCylinderPositions(world(100, 70, -40), 4, 6), 100, 70, -40);
++
++// --- report ---
++console.log(`checked ${checked} cases, ${violations.length} violations\n`);
++const byKind: { [k: string]: number } = {};
++for (const v of violations) byKind[v.kind] = (byKind[v.kind] || 0) + 1;
++console.log('by kind:', JSON.stringify(byKind, null, 1));
++console.log('');
++for (const v of violations) {
++  console.log(`  [${v.kind}] ${v.fn}(${v.args})`);
++  console.log(`      ${v.detail}`);
++}
++
++// --- second pass: divide-by-zero / degenerate-dimension probes ---
++console.log('\n--- second pass: degenerate inputs ---');
++const before = violations.length;
++
++// height=1 makes halfHeight 0 in the hyperboloid, and heightInt a denominator elsewhere
++safe('getHyperboloidPositions', 'h=1', () => c.getHyperboloidPositions(C, 5, 2, 1));
++safe('getHyperboloidPositions', 'h=2', () => c.getHyperboloidPositions(C, 5, 2, 2));
++safe('getHyperboloidPositions', 'waist=0 h=10', () => c.getHyperboloidPositions(C, 5, 0, 10));
++safe('getHyperboloidPositions', 'waist>base', () => c.getHyperboloidPositions(C, 2, 5, 10));
++safe('getHyperboloidPositions', 'base=waist', () => c.getHyperboloidPositions(C, 4, 4, 10));
++
++safe('getParaboloidPositions', 'h=0 (focal length denominator)', () => c.getParaboloidPositions(C, 5, 0), true);
++safe('getParaboloidPositions', 'h=1', () => c.getParaboloidPositions(C, 5, 1));
++safe('getParaboloidPositions', 'r=1 h=1', () => c.getParaboloidPositions(C, 1, 1));
++
++safe('getCylinderPositions', 'h=1', () => c.getCylinderPositions(C, 3, 1));
++safe('getCylinderPositions', 'r=1 h=1', () => c.getCylinderPositions(C, 1, 1));
++safe('getConePositions', 'h=1', () => c.getConePositions(C, 3, 1));
++safe('getConePositions', 'r=1 h=1', () => c.getConePositions(C, 1, 1));
++
++// small radii exercise the midpoint-circle symmetry edges (y === 0 and x === y)
++for (const r of [1, 2, 3, 4, 6, 7, 10]) {
++  safe('getCirclePositions', `r=${r} hollow`, () => c.getCirclePositions(C, r, Axis.Y, true));
++  safe('getCirclePositions', `r=${r} solid`, () => c.getCirclePositions(C, r, Axis.Y, false));
++}
++
++// helix denominators
++safe('getHelixPositions', 'h=1 turns=1', () => c.getHelixPositions(C, 3, 1, 1));
++safe('getHelixPositions', 'r=1 h=2 turns=1', () => c.getHelixPositions(C, 1, 2, 1));
++safe('getHelixPositions', 'counter-clockwise', () => c.getHelixPositions(C, 3, 10, 2, false));
++
++// torus where the tube is as large as the ring
++safe('getTorusPositions', 'R=r=3', () => c.getTorusPositions(C, 3, 3));
++safe('getTorusPositions', 'r>R', () => c.getTorusPositions(C, 2, 5));
++
++// line degenerate axes
++safe('getLinePositions', 'pure X', () => c.getLinePositions(world(0, 0, 0), world(10, 0, 0)));
++safe('getLinePositions', 'pure Y', () => c.getLinePositions(world(0, 0, 0), world(0, 10, 0)));
++safe('getLinePositions', 'pure Z', () => c.getLinePositions(world(0, 0, 0), world(0, 0, 10)));
++
++// ellipsoid with one axis of 1
++safe('getEllipsoidPositions', 'ry=1', () => c.getEllipsoidPositions(C, 5, 1, 5));
++safe('getEllipsoidPositions', 'ry=1 hollow', () => c.getEllipsoidPositions(C, 5, 1, 5, true));
++
++console.log(`second pass added ${violations.length - before} violations`);
++for (let i = before; i < violations.length; i++) {
++  const v = violations[i];
++  console.log(`  [${v.kind}] ${v.fn}(${v.args})`);
++  console.log(`      ${v.detail}`);
++}
++
++// --- third pass: the fixes must produce the right shapes, not merely stop violating ---
++console.log('\n--- third pass: shape assertions ---');
++let assertions = 0;
++let assertFails = 0;
++
++function expect(name: string, condition: boolean, detail: string): void {
++  assertions++;
++  if (condition) {
++    console.log(`  ok   ${name}`);
++  } else {
++    assertFails++;
++    console.log(`  FAIL ${name}: ${detail}`);
++  }
++}
++
++function distinct(ps: Position[]): number {
++  const seen: { [k: string]: boolean } = {};
++  for (const p of ps) seen[key(p)] = true;
++  return Object.keys(seen).length;
++}
++
++// Fix A: deduplication must not drop any point of the circle, only the repeats.
++for (const r of [1, 2, 3, 5, 10]) {
++  const ring = c.getCirclePositions(C, r, Axis.Y, true);
++  expect(
++    `hollow circle r=${r}: no duplicates`,
++    ring.length === distinct(ring),
++    `${ring.length} emitted vs ${distinct(ring)} distinct`
++  );
++  // Every emitted point must sit on the ring the midpoint algorithm traces.
++  let offRing = 0;
++  for (const p of ring) {
++    const dx = p.getValue(Axis.X);
++    const dz = p.getValue(Axis.Z);
++    const d = Math.sqrt(dx * dx + dz * dz);
++    if (Math.abs(d - r) > 1.0) offRing++;
++  }
++  expect(`hollow circle r=${r}: all points near the ring`, offRing === 0, `${offRing} points off the ring`);
++  // 4-fold symmetry: rotating the set by 90 degrees must map it onto itself.
++  const set: { [k: string]: boolean } = {};
++  for (const p of ring) set[`${p.getValue(Axis.X)},${p.getValue(Axis.Z)}`] = true;
++  let asym = 0;
++  for (const p of ring) {
++    const x = p.getValue(Axis.X);
++    const z = p.getValue(Axis.Z);
++    if (!set[`${-z},${x}`]) asym++;
++  }
++  expect(`hollow circle r=${r}: 4-fold symmetric`, asym === 0, `${asym} points lack their 90-degree image`);
++}
++
++// Fix B1: waist 0 should degenerate into a double cone, widening away from the middle.
++const dc = c.getHyperboloidPositions(C, 6, 0, 11);
++expect('hyperboloid waist=0: not empty', dc.length > 0, `got ${dc.length}`);
++{
++  const widthAt: { [y: number]: number } = {};
++  for (const p of dc) {
++    const y = p.getValue(Axis.Y);
++    const x = Math.abs(p.getValue(Axis.X));
++    widthAt[y] = Math.max(widthAt[y] || 0, x);
++  }
++  const mid = 5; // halfHeight for height 11
++  expect(
++    'hyperboloid waist=0: narrowest at the waist',
++    (widthAt[mid] || 0) <= (widthAt[0] || 0) && (widthAt[mid] || 0) <= (widthAt[10] || 0),
++    `widths: y0=${widthAt[0]} ymid=${widthAt[mid]} y10=${widthAt[10]}`
++  );
++}
++
++// Fix B1 must not change the shape where the old formula was already valid.
++{
++  const h = c.getHyperboloidPositions(C, 6, 3, 11);
++  const widthAt: { [y: number]: number } = {};
++  for (const p of h) {
++    const y = p.getValue(Axis.Y);
++    const x = Math.abs(p.getValue(Axis.X));
++    widthAt[y] = Math.max(widthAt[y] || 0, x);
++  }
++  expect('hyperboloid waist=3: waist is 3 wide', widthAt[5] === 3, `got ${widthAt[5]}`);
++  expect('hyperboloid waist=3: ends are 6 wide', widthAt[0] === 6 && widthAt[10] === 6, `got ${widthAt[0]} / ${widthAt[10]}`);
++}
++
++// Fix B2: a single-layer hyperboloid sits at the waist radius.
++{
++  const one = c.getHyperboloidPositions(C, 6, 2, 1);
++  expect('hyperboloid h=1: not empty', one.length > 0, `got ${one.length}`);
++  let maxX = 0;
++  for (const p of one) maxX = Math.max(maxX, Math.abs(p.getValue(Axis.X)));
++  expect('hyperboloid h=1: single layer at the waist radius', maxX === 2, `max |x| = ${maxX}`);
++}
++
++// Fix C: paraboloid must still widen with height, and h=1 must yield one layer.
++{
++  const par = c.getParaboloidPositions(C, 6, 8);
++  const widthAt: { [y: number]: number } = {};
++  for (const p of par) {
++    const y = p.getValue(Axis.Y);
++    widthAt[y] = Math.max(widthAt[y] || 0, Math.abs(p.getValue(Axis.X)));
++  }
++  expect('paraboloid: widens with height', (widthAt[7] || 0) > (widthAt[1] || 0), `y1=${widthAt[1]} y7=${widthAt[7]}`);
++  const p1 = c.getParaboloidPositions(C, 6, 1);
++  expect('paraboloid h=1: exactly one layer', p1.length > 0 && Object.keys(widthAt).length > 1, `h=1 count ${p1.length}`);
++  expect('paraboloid h=0: empty by design', c.getParaboloidPositions(C, 6, 0).length === 0, 'expected empty');
++}
++
++// Fix D: TWO_PI is now exact, so a full helix turn should close on its starting angle.
++{
++  const hx = c.getHelixPositions(C, 20, 40, 1);
++  expect('helix: not empty', hx.length > 0, `got ${hx.length}`);
++  const first = hx[0];
++  const last = hx[hx.length - 1];
++  const dx = Math.abs(first.getValue(Axis.X) - last.getValue(Axis.X));
++  const dz = Math.abs(first.getValue(Axis.Z) - last.getValue(Axis.Z));
++  expect('helix: one full turn returns to the starting angle', dx <= 1 && dz <= 1, `dx=${dx} dz=${dz}`);
++}
++
++console.log(`\n${assertions - assertFails}/${assertions} shape assertions passed`);
+diff --git a/harness/stubs.ts b/harness/stubs.ts
+new file mode 100644
+index 0000000..701222e
+--- /dev/null
++++ b/harness/stubs.ts
+@@ -0,0 +1,80 @@
++// Minimal stand-ins for the MakeCode Minecraft API so `src/coordinates.ts` can be compiled
++// and executed outside the editor. Behaviour matches what the coordinate functions rely on:
++// a Position is an immutable (x, y, z) triple, and everything else is inert.
++
++enum Axis {
++  X = 0,
++  Y = 1,
++  Z = 2,
++}
++
++enum FillOperation {
++  Replace = 0,
++  Hollow = 1,
++  Outline = 2,
++  Destroy = 3,
++  Keep = 4,
++}
++
++class Position {
++  constructor(private readonly _x: number, private readonly _y: number, private readonly _z: number) {}
++
++  public getValue(axis: Axis): number {
++    if (axis === Axis.X) return this._x;
++    if (axis === Axis.Y) return this._y;
++    return this._z;
++  }
++
++  public toString(): string {
++    return `(${this._x}, ${this._y}, ${this._z})`;
++  }
++}
++
++function world(x: number, y: number, z: number): Position {
++  return new Position(x, y, z);
++}
++
++function pos(x: number, y: number, z: number): Position {
++  return new Position(x, y, z);
++}
++
++namespace player {
++  /** No-op: progress chatter is irrelevant outside the game and would flood the console. */
++  export function say(_message: any): void {}
++}
++
++namespace positions {
++  export function equals(a: Position, b: Position): boolean {
++    return (
++      a.getValue(Axis.X) === b.getValue(Axis.X) &&
++      a.getValue(Axis.Y) === b.getValue(Axis.Y) &&
++      a.getValue(Axis.Z) === b.getValue(Axis.Z)
++    );
++  }
++
++  export function add(a: Position, b: Position): Position {
++    return new Position(
++      a.getValue(Axis.X) + b.getValue(Axis.X),
++      a.getValue(Axis.Y) + b.getValue(Axis.Y),
++      a.getValue(Axis.Z) + b.getValue(Axis.Z)
++    );
++  }
++}
++
++namespace blocks {
++  export const placed: Position[] = [];
++  export const filled: { from: Position; to: Position }[] = [];
++
++  export function place(_block: number, position: Position): void {
++    placed.push(position);
++  }
++
++  export function fill(_block: number, from: Position, to: Position, _op: FillOperation): void {
++    filled.push({ from, to });
++  }
++}
++
++namespace loops {
++  /** No-op: the harness has no game tick to yield to. */
++  export function pause(_ms: number): void {}
++}
+diff --git a/harness/tsconfig.json b/harness/tsconfig.json
+new file mode 100644
+index 0000000..3992170
+--- /dev/null
++++ b/harness/tsconfig.json
+@@ -0,0 +1,12 @@
++{
++  "compilerOptions": {
++    "target": "ES2020",
++    "module": "none",
++    "strict": false,
++    "noImplicitAny": false,
++    "skipLibCheck": true,
++    "types": [],
++    "outFile": "built/all.js"
++  },
++  "files": ["stubs.ts", "../src/coordinates.ts", "run.ts"]
++}
+diff --git a/harness/tsconfig.probe.json b/harness/tsconfig.probe.json
+new file mode 100644
+index 0000000..0c97921
+--- /dev/null
++++ b/harness/tsconfig.probe.json
+@@ -0,0 +1,16 @@
++{
++  "compilerOptions": {
++    "target": "ES2020",
++    "module": "none",
++    "strict": false,
++    "noImplicitAny": false,
++    "skipLibCheck": true,
++    "types": [],
++    "outFile": "built/probe.js"
++  },
++  "files": [
++    "stubs.ts",
++    "../src/coordinates.ts",
++    "probe.ts"
++  ]
++}
+\ No newline at end of file
+diff --git a/src/coordinates.ts b/src/coordinates.ts
+index d264c77..6c00c2b 100644
+--- a/src/coordinates.ts
++++ b/src/coordinates.ts
+@@ -25,8 +25,8 @@ namespace coordinates {
+ 
+     /** 数学定数 */
+     const MATH_CONSTANTS = {
+-        PI: 3.14159,
+-        TWO_PI: 2 * 3.14159
++        PI: Math.PI,
++        TWO_PI: 2 * Math.PI
+     };
+ 
+     /** プログレス報告定数 */
+@@ -605,7 +605,9 @@ namespace coordinates {
+         const circumference = MATH_CONSTANTS.TWO_PI * radiusInt;
+         const totalArcLength = circumference * turns;
+         const helixLength = Math.sqrt(totalArcLength * totalArcLength + heightInt * heightInt);
+-        const steps = Math.max(heightInt * 2, Math.round(helixLength)); // 連続性を保つ密度
++        // 半径と高さがともに 0 だと helixLength も 0 になり、progress が 0 / 0 = NaN になる。
++        // 最低 1 ステップを保証して NaN の伝播を防ぐ。
++        const steps = Math.max(1, Math.max(heightInt * 2, Math.round(helixLength))); // 連続性を保つ密度
+ 
+         // MakeCode互換の重複除去用（Set代替）
+         const seenPositions: string[] = [];
+@@ -663,13 +665,18 @@ namespace coordinates {
+         const heightInt = Math.round(height);
+         const radiusSquared = radiusInt * radiusInt;
+ 
+-        // パラボロイドの方程式: z = (x² + y²) / (4 * focal_length)
+-        // focal_lengthを調整してheightに合わせる
+-        const focalLength = radiusSquared / (4 * heightInt);
++        // 高さが 1 未満では焦点距離が定義できない（0 除算で Infinity になる）。
++        if (heightInt < 1) {
++            return positions;
++        }
+ 
++        // パラボロイドの方程式: z = (x² + y²) / (4 * focal_length)
++        // focal_length = radiusSquared / (4 * heightInt) を代入すると 4 が相殺され、
++        // currentRadiusSquared = radiusSquared * y / heightInt となる。
++        // 中間値として Infinity を作らないぶん安全。
+         for (let y = 0; y < heightInt; y++) {
+             // 現在の高さでのパラボラ半径を計算
+-            const currentRadiusSquared = 4 * focalLength * y;
++            const currentRadiusSquared = (radiusSquared * y) / heightInt;
+             const currentRadius = Math.sqrt(currentRadiusSquared);
+             const currentRadiusInt = Math.floor(currentRadius);
+ 
+@@ -737,15 +744,25 @@ namespace coordinates {
+         const halfHeight = Math.floor(heightInt / 2);
+ 
+         // 双曲面の形状パラメータ
+-        const a = waistRadiusInt; // 最小半径
+-        const b = baseRadiusInt - waistRadiusInt; // 半径の変化幅
++        const a = waistRadiusInt; // 最小半径（t = 0 での半径）
++        // 端 (t = ±1) の半径が baseRadius と一致するよう b を決める。
++        // r(t) = sqrt(a² + (t*b)²) なので sqrt(a² + b²) = baseRadius を b について解く。
++        // baseRadius が waistRadius 以下の形状はこの式では表せないため円柱に落とす。
++        const b = baseRadiusInt > waistRadiusInt
++            ? Math.sqrt(baseRadiusInt * baseRadiusInt - waistRadiusInt * waistRadiusInt)
++            : 0;
++
++        // height が 1 のとき halfHeight が 0 になり t が NaN になるのを防ぐ。
++        // 除数を 1 にすると単層は t = 0、すなわちくびれ位置に置かれる。
++        const halfHeightDivisor = halfHeight > 0 ? halfHeight : 1;
+ 
+         for (let y = 0; y < heightInt; y++) {
+             // 中心からの距離 (-1 to 1 の範囲)
+-            const t = (y - halfHeight) / halfHeight;
++            const t = (y - halfHeight) / halfHeightDivisor;
+             
+-            // 双曲面の方程式: r(t) = a * sqrt(1 + (t*b/a)²)
+-            const currentRadius = a * Math.sqrt(1 + (t * b / a) * (t * b / a));
++            // 双曲面の方程式: r(t) = a * sqrt(1 + (t*b/a)²) = sqrt(a² + (t*b)²)
++            // 後者は a = 0（くびれ半径ゼロ）でも定義され、二重円錐に退化する。
++            const currentRadius = Math.sqrt(a * a + (t * b) * (t * b));
+             const currentRadiusInt = Math.round(currentRadius);
+             const currentRadiusSquared = currentRadiusInt * currentRadiusInt;
+ 
+@@ -824,26 +841,32 @@ namespace coordinates {
+             let err = 0;
+ 
+             while (x >= y) {
+-                // 8方向の対称点を追加
++                // 8方向の対称点を追加。
++                // 軸上 (y === 0) と対角線上 (x === y) では反射像が元の点と重なるため、
++                // 重複を生まないよう条件付きで追加する。
+                 positions.push(toWorld(x, y));
+-                positions.push(toWorld(y, x));
+-                positions.push(toWorld(-y, x));
+-                positions.push(toWorld(-x, y));
+-                positions.push(toWorld(-x, -y));
+-                positions.push(toWorld(-y, -x));
+-                positions.push(toWorld(y, -x));
+-                positions.push(toWorld(x, -y));
++                if (y !== 0) positions.push(toWorld(x, -y));
++                if (x !== 0) positions.push(toWorld(-x, y));
++                if (x !== 0 && y !== 0) positions.push(toWorld(-x, -y));
++
++                if (x !== y) {
++                    positions.push(toWorld(y, x));
++                    if (x !== 0) positions.push(toWorld(y, -x));
++                    if (y !== 0) positions.push(toWorld(-y, x));
++                    if (x !== 0 && y !== 0) positions.push(toWorld(-y, -x));
++                }
+                 if (positions.length % PROGRESS_INTERVAL_COUNT === 0) {
+                     player.say(getProgressMessage(positions.length));
+                 }
+ 
+-                if (err <= 0) {
+-                    y += 1;
+-                    err += 2 * y + 1;
+-                }
+-                if (err > 0) {
++                // 標準形の中点円: y を進め、誤差を更新してから x を判定する。
++                // 誤差の判定を更新前後で二度行うと x が 1 ステップ早く減り、
++                // 半径から 1 ブロック以上ずれた点が出る。
++                y += 1;
++                err += 1 + 2 * y;
++                if (2 * (err - x) + 1 > 0) {
+                     x -= 1;
+-                    err -= 2 * x + 1;
++                    err += 1 - 2 * x;
+                 }
+             }
+         } else {

@@ -62,6 +62,21 @@ jobs:
         env:
           PROPERTY_RUNS: 500
 
+      # Turning a packed shape into commands and sending them. Mostly about failure: a
+      # negative status code is not a refusal, a command that never left is, and everything
+      # failing to leave is a missing connection rather than a half-built shape.
+      - name: Placing blocks
+        working-directory: packages/server
+        run: node test/placer.test.mjs
+
+      # The layer grid as an input. The pair of reserved characters carries the weight - "."
+      # clears a block and "?" must never reach a command - and the last case hands
+      # read_region's own output straight to build.layers, since the round trip stops working
+      # the moment the two notations drift.
+      - name: Building from layers
+        working-directory: packages/server
+        run: node test/build-layers.test.mjs
+
       # Decodes real records captured from a running Education Edition world - four
       # subchunks at four bit widths and three saved structures. No game, no database, no
       # network: the formats are pure functions over bytes, so they belong here.
@@ -69,12 +84,27 @@ jobs:
         working-directory: packages/server
         run: node test/world.test.mjs
 
+      # Reading the world: the layer encoding, and what the tools do with a bad reply. A read
+      # that comes back short and is accepted is the one outcome the whole path exists to
+      # prevent, so the retry and the refusal are checked rather than the happy case.
+      - name: World tools
+        working-directory: packages/server
+        run: node test/world-tools.test.mjs
+
       # The add-on protocol: correlating replies that arrive as chat, and refusing an answer
       # that lost a line. A dropped line is invisible - the survivors are all well formed -
       # so without the header count a partial region would be handed over as a complete one.
       - name: Bridge protocol
         working-directory: packages/server
         run: node test/bridge.test.mjs
+
+      # The socket, against a fake Bedrock client. The first case asserts on the subscribe
+      # frame itself: socket-be decides its subscriptions from the handlers registered when a
+      # connection lands, so registering PlayerMessage a moment late means chat never arrives
+      # and nothing says so. That cost a live session.
+      - name: Transport
+        working-directory: packages/server
+        run: node test/transport.test.mjs
       # Searches the parameter space for inputs that break an invariant, rather than checking
       # the handful a fixed case happens to cover. It found a helix that came out in two
       # pieces at a radius no golden case used.

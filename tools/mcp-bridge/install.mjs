@@ -15,6 +15,7 @@
 // So the script checks what is already there, reports what it is replacing, and ends with the
 // restart rather than with "done".
 
+import { execSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -53,6 +54,70 @@ function versionOf(manifestPath) {
   }
 }
 
+/** What the script itself claims, which can differ from its manifest and is what actually runs. */
+function scriptVersion(scriptPath) {
+  try {
+    return /const VERSION = '([^']+)'/.exec(fs.readFileSync(scriptPath, 'utf8'))?.[1] ?? null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Copies of this pack that individual worlds are carrying.
+ *
+ * Minecraft copies an applied pack into the world folder, and a world that was set up with an
+ * older build keeps that older build next to its database. Whether the game prefers it or the
+ * development folder is not something to reason about from the outside - so they are listed,
+ * with what each one says, and the answer comes from `world.bridge_status` instead.
+ *
+ * Worth listing even when they turn out to be ignored: two stale copies and a fresh one, with
+ * the game running a fourth version, is exactly the situation in which a guess feels safe.
+ */
+function worldCopies() {
+  const local = process.env['LOCALAPPDATA'];
+  if (!local) return [];
+  const worlds = path.join(
+    local,
+    'Packages',
+    'Microsoft.MinecraftEducationEdition_8wekyb3d8bbwe',
+    'LocalState',
+    'games',
+    'com.mojang',
+    'minecraftWorlds'
+  );
+  if (!fs.existsSync(worlds)) return [];
+
+  const found = [];
+  for (const entry of fs.readdirSync(worlds)) {
+    const pack = path.join(worlds, entry, 'behavior_packs', 'mcp-bridge');
+    if (!fs.existsSync(pack)) continue;
+    let name = entry;
+    try {
+      name = fs.readFileSync(path.join(worlds, entry, 'levelname.txt'), 'utf8').trim() || entry;
+    } catch {
+      /* the folder name will do */
+    }
+    found.push({
+      world: name,
+      path: pack,
+      manifest: versionOf(path.join(pack, 'manifest.json')),
+      script: scriptVersion(path.join(pack, 'scripts', 'main.js')),
+    });
+  }
+  return found;
+}
+
+/** Whether the game is open, which decides whether touching world folders is a good idea. */
+function minecraftIsRunning() {
+  try {
+    const out = execSync('tasklist /FI "IMAGENAME eq Minecraft.Windows.exe" /NH', { encoding: 'utf8' });
+    return out.includes('Minecraft.Windows.exe');
+  } catch {
+    return false;
+  }
+}
+
 const source = HERE;
 const target = packFolder();
 
@@ -72,11 +137,37 @@ const destination = path.join(target, 'mcp-bridge');
 const ours = versionOf(path.join(source, 'manifest.json'));
 const theirs = fs.existsSync(destination) ? versionOf(path.join(destination, 'manifest.json')) : null;
 
+const ourScript = scriptVersion(path.join(source, 'scripts', 'main.js'));
+const theirScript = fs.existsSync(destination) ? scriptVersion(path.join(destination, 'scripts', 'main.js')) : null;
+const worlds = worldCopies();
+const running = minecraftIsRunning();
+
 console.log('');
-console.log(`  this repository   ${ours}`);
-console.log(`  installed         ${theirs ?? 'nothing installed'}`);
+console.log(`  this repository   manifest ${ours}   script ${ourScript}`);
+console.log(`  installed         manifest ${theirs ?? '-'}   script ${theirScript ?? '-'}`);
 console.log(`  installing into   ${destination}`);
 console.log('');
+
+if (worlds.length) {
+  // Listed rather than acted on. Which copy the game prefers is not decidable from here, and
+  // a stale one next to a fresh one is exactly the situation where a guess feels safe.
+  console.log('  Worlds carrying their own copy of this pack:');
+  for (const copy of worlds) {
+    console.log(`    ${copy.world}  —  manifest ${copy.manifest ?? '-'}, script ${copy.script ?? '-'}`);
+  }
+  console.log('');
+  console.log('  These are not touched. If the game turns out to be running one of them rather');
+  console.log('  than the copy above, re-apply the pack to the world from inside Minecraft.');
+  console.log('  world.bridge_status reports which version is actually running - it is the only');
+  console.log('  thing here that can.');
+  console.log('');
+}
+
+if (running) {
+  console.log('  Minecraft is open. That is fine for copying, and not fine for believing the');
+  console.log('  result: the running game keeps the script it loaded at startup either way.');
+  console.log('');
+}
 
 if (CHECK_ONLY) {
   console.log(theirs === ours ? '  Same version. Nothing to copy.' : '  Different. Run without --check to copy.');

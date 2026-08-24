@@ -1,0 +1,13 @@
+{
+  "name": "live-probe",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Records what Minecraft actually sends, so the design stops guessing.",
+  "dependencies": {
+    "ws": "^8.18.0"
+  },
+  "scripts": {
+    "start": "node probe.mjs"
+  }
+}

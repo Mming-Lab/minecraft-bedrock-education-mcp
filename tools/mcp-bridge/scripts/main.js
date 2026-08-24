@@ -6,15 +6,19 @@
 // client cannot open a socket, and @minecraft/server-net is documented as dedicated-server
 // only.
 //
-// ## Two things that took three sessions to find
+// ## Three things that took several sessions to find
 //
-// `world.sendMessage` does not reach the socket. `player.runCommand('say ...')` does. The
+// `world.sendMessage` does not reach the socket. `player.runCommand('tell ...')` does. The
 // first bridge used only sendMessage and looked completely dead; measured side by side, the
 // API path delivered nothing and the command path delivered everything.
 //
 // `dimension.runCommand` is not the way in. The command has to go through a player - which
 // also means nothing can be said before one exists, so the boot notice waits rather than
 // firing on the first tick.
+//
+// A chat line over about 505 characters vanishes *whole* rather than being truncated. That is
+// why `readregion` splits its answer and says up front how many parts to expect: a dropped
+// line is otherwise invisible, because everything that does arrive is well-formed.
 //
 // ## Why the module version is pinned to 2.1.0
 //
@@ -25,7 +29,17 @@
 import { world, system } from '@minecraft/server';
 
 const TAG = 'MCPB';
-const VERSION = '0.1.0';
+
+/**
+ * Bumped whenever the wire format or the handler set changes.
+ *
+ * The MCP server compares this against what it expects and says so when they differ, because
+ * they have differed before without anyone noticing: pack folders are only scanned when the
+ * game launches, so replacing the files and reloading the world leaves the old script running.
+ * A design decision was recorded as done on that basis and was not in effect in the game for a
+ * day. `world.bridge_status` is the check.
+ */
+const VERSION = '0.2.0';
 
 /**
  * The output path.
@@ -34,8 +48,8 @@ const VERSION = '0.1.0';
  * front of everyone in the world, which in a classroom is the whole chat gone. A private
  * message is never sent to the rest of the class at all.
  *
- * Both were measured side by side. Both reach the socket; the ceilings are 481 characters for
- * `say` and 484 for `tell`, so nothing is given up by choosing the quiet one.
+ * Both were measured side by side. Both reach the socket, and the ceilings are within seven
+ * characters of each other, so nothing is given up by choosing the quiet one.
  *
  * Hiding the chat instead was the other candidate, and it is not available. `/hud` takes
  * hotbar, crosshair, paperdoll, armor, health, progress_bar, hunger, air_bubbles,
@@ -46,13 +60,11 @@ const VERSION = '0.1.0';
  * `world.sendMessage` is not an option however tempting it looks. It prints in the game and
  * fires nothing, because PlayerMessage is a *player* event. That cost three sessions.
  */
-const CHANNEL = 'tell';
-
 function send(text) {
   const player = world.getPlayers()[0];
   if (!player) return false;
   try {
-    player.runCommand(CHANNEL === 'tell' ? 'tell @s ' + text : 'say ' + text);
+    player.runCommand('tell @s ' + text);
     return true;
   } catch {
     return false;
@@ -68,68 +80,14 @@ function fail(id, error) {
 }
 
 const handlers = {
-  /**
-   * Which return channel to use, and whether the chat can be hidden while it is used.
-   *
-   * The bridge answers through chat because that is the only path that reaches the socket,
-   * and that means a 4096-block read puts 172 lines in front of everyone in the world. In a
-   * classroom that is the whole chat gone. Two things might fix it, and the add-on can do
-   * both itself:
-   *
-   *   tell @s   should be visible only to the one player rather than broadcast
-   *   hud       should hide the chat element entirely, leaving the transport alone
-   *
-   * Neither has been measured. `tell` might not fire PlayerMessage at all - `say` does and
-   * `world.sendMessage` does not, so the difference is not obvious from the outside - and its
-   * line limit might differ from say's 481. So this sends the same payload both ways, tagged,
-   * and lets the far end report which arrived.
-   */
-  channel(id, args) {
-    const player = world.getPlayers()[0];
-    if (!player) {
-      reply(id, { ok: false, error: 'no player' });
-      return;
-    }
-    const chars = Math.min(args.chars || 200, 1200);
-    const filler = 'y'.repeat(chars);
-    const results = {};
-
-    // Hiding first, so a channel that only works while the chat is visible shows up as such.
-    if (args.hide) {
-      try {
-        player.runCommand('hud @s hide chat');
-        results.hud_hide = 'accepted';
-      } catch (error) {
-        results.hud_hide = String((error && error.message) || error);
-      }
-    }
-
-    for (const verb of ['say', 'tell']) {
-      try {
-        const text = TAG + '|' + id + '.' + verb + '|' + filler;
-        player.runCommand(verb === 'tell' ? 'tell @s ' + text : 'say ' + text);
-        results[verb] = 'sent';
-      } catch (error) {
-        results[verb] = String((error && error.message) || error);
-      }
-    }
-
-    if (args.hide) {
-      try {
-        player.runCommand('hud @s reset');
-        results.hud_reset = 'accepted';
-      } catch (error) {
-        results.hud_reset = String((error && error.message) || error);
-      }
-    }
-
-    // Through `say`, which is known to arrive, so the summary itself is never the casualty.
-    reply(id, { ok: true, chars, results });
-  },
-
-  /** Proves the pack is live and reports what the runtime will admit to. */
+  /** Proves the pack is live, and which version of it is. */
   ping(id) {
-    reply(id, { ok: true, version: VERSION, tick: system.currentTick, players: world.getPlayers().length });
+    reply(id, {
+      ok: true,
+      version: VERSION,
+      tick: system.currentTick,
+      players: world.getPlayers().length,
+    });
   },
 
   /**
@@ -158,12 +116,19 @@ const handlers = {
   /**
    * A box of blocks, split across as many chat lines as it takes.
    *
-   * `perMessage` is deliberately a parameter: how much fits in one line is the number that
-   * decides whether this channel is usable for bulk reads, and it has not been measured yet.
+   * `perMessage` is the caller's decision because how much fits in one line depends on how
+   * long the block names turn out to be, and the names are what the read is for. Measured: a
+   * region of air, stone and dirt takes 64 per line comfortably, and one of
+   * `waxed_oxidized_cut_copper_stairs` loses every line at 24. The server starts at 24 and
+   * halves when an answer comes back with a part missing.
+   *
+   * The header's `parts` is what makes that detectable. Without it a reply that dropped a line
+   * would look like a smaller region, and the model would be told about a space it had only
+   * partly seen.
    */
   readregion(id, args) {
     const dimension = world.getDimension(args.dimension || 'overworld');
-    const perMessage = args.perMessage || 30;
+    const perMessage = args.perMessage || 24;
     const names = [];
     let missing = 0;
 
@@ -198,10 +163,10 @@ const handlers = {
   /**
    * Entities near a point - which the world file cannot give.
    *
-   * This is what the add-on is actually for. Bulk block reading goes to the database: it has
-   * the blocks with their states already, unlimited in area, and needs no add-on at all. What
-   * the database does not have is anything live - where a mob is right now, what is in a
-   * chest, who is standing where.
+   * This is what the add-on is actually for. Bulk block reading could go to the database: it
+   * has the blocks with their states already, unlimited in area. What the database does not
+   * have is anything live - where a mob is right now, what is in a chest, who is standing
+   * where - and it needs a flush before it has anything at all.
    */
   entities(id, args) {
     const dimension = world.getDimension(args.dimension || 'overworld');
@@ -262,22 +227,6 @@ const handlers = {
       if (item) items.push({ slot, type: item.typeId, amount: item.amount });
     }
     reply(id, { ok: true, name: block.typeId, size: container.size, items });
-  },
-
-  /**
-   * How much gets through, and how fast.
-   *
-   * Chat lines have a length limit somewhere and possibly a rate limit; neither is documented
-   * for this path. What arrives decides whether a region read is one round trip or a hundred.
-   */
-  bench(id, args) {
-    const count = Math.min(args.count || 20, 400);
-    const chars = Math.min(args.chars || 200, 2000);
-    const filler = 'x'.repeat(chars);
-    reply(id, { ok: true, sending: count, chars, tick: system.currentTick });
-    for (let i = 0; i < count; i++) {
-      send(TAG + '|' + id + '.' + i + '|' + system.currentTick + '|' + filler);
-    }
   },
 };
 

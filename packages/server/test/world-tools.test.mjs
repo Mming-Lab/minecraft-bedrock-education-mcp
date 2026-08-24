@@ -17,7 +17,7 @@ import assert from 'node:assert/strict';
 
 import { BridgeProtocolError } from '../dist/bridge/protocol.js';
 import { toLayers, indexOf, RegionTooVariedError } from '../dist/world/layers.js';
-import { toolsFor, offlineBridge } from '../dist/tools/index.js';
+import { toolsFor, offlineBridge, EXPECTED_ADDON_VERSION } from '../dist/tools/index.js';
 
 let passed = 0;
 let failed = 0;
@@ -278,6 +278,9 @@ await test('with nothing connected, every world tool says how to connect', async
   // report something the user can act on rather than concluding the server cannot read.
   for (const tool of toolsFor(offlineBridge)) {
     if (!tool.name.startsWith('world.')) continue;
+    // Except the one whose job is to explain the others' failures. It answers instead of
+    // throwing, and is checked on its own below.
+    if (tool.name === 'world.bridge_status') continue;
     const args = {
       position: { x: 0, y: 64, z: 0 },
       center: { x: 0, y: 64, z: 0 },
@@ -286,6 +289,44 @@ await test('with nothing connected, every world tool says how to connect', async
     };
     await assert.rejects(async () => tool.handler(args), /\/connect localhost:19131/, tool.name);
   }
+});
+
+await test('bridge_status answers instead of failing when nothing is connected', async () => {
+  // The tool someone reaches for *because* something is wrong. Throwing would make it the
+  // fourth thing that does not work rather than the one that explains the other three.
+  const status = await tools(offlineBridge).get('world.bridge_status').handler({});
+
+  assert.equal(status.connected, false);
+  assert.equal(status.addonVersion, null);
+  assert.match(status.advice, /\/connect localhost:19131/);
+});
+
+await test('an add-on older than the server is reported, with what to do about it', async () => {
+  // The failure that already happened once and went unnoticed for a day: the files on disk
+  // said `tell` and the game was still running the `say` build, because pack folders are only
+  // scanned at launch.
+  const bridge = fakeBridge(() => ({
+    header: { ok: true, version: '0.1.0', tick: 1234, players: 1 },
+    parts: [],
+  }));
+  const status = await tools(bridge).get('world.bridge_status').handler({});
+
+  assert.equal(status.connected, true);
+  assert.equal(status.addonVersion, '0.1.0');
+  assert.equal(status.upToDate, false);
+  assert.match(status.advice, /closed and reopened/, 'the advice does not say a reload is not enough');
+});
+
+await test('a current add-on reports no advice at all', async () => {
+  const bridge = fakeBridge(() => ({
+    header: { ok: true, version: EXPECTED_ADDON_VERSION, tick: 99, players: 2 },
+    parts: [],
+  }));
+  const status = await tools(bridge).get('world.bridge_status').handler({});
+
+  assert.equal(status.upToDate, true);
+  assert.equal(status.advice, null, 'a healthy bridge should have nothing to say');
+  assert.equal(status.players, 2);
 });
 
 console.log(`\n${passed} passed, ${failed} failed`);

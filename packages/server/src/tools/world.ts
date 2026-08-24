@@ -80,6 +80,77 @@ function headerOf(reply: Assembled, expected: readonly string[] = []): AddonRepl
   return header;
 }
 
+// --- is anything on the other end? ------------------------------------------------------------
+
+/**
+ * The add-on version this server was written against.
+ *
+ * Checked rather than assumed because the two have already disagreed without anyone noticing.
+ * Pack folders are scanned when the game launches, so replacing the files and reloading the
+ * world leaves the previous script running - and a decision was recorded as done on that
+ * basis while the game went on doing the old thing for a day.
+ */
+export const EXPECTED_ADDON_VERSION = '0.2.0';
+
+export const worldBridgeStatus = (bridge: WorldBridge) =>
+  defineTool({
+    name: 'world.bridge_status',
+    title: 'Check the connection and the add-on',
+    description: [
+      'Report whether Minecraft is connected, whether the bridge add-on is loaded, and which version of it is running.',
+      'Call this first when any world.* tool fails, or before a lesson, to find out which of the three possible problems you have: nothing connected, no add-on, or an add-on that is out of date.',
+      'It never fails — a missing connection is one of its answers, and the answer says what to do about it.',
+      'Do NOT call it before every read. The other tools already say what is wrong when they fail; this is for when you want to know before asking.',
+    ].join(' '),
+    inputSchema: {},
+    outputSchema: {
+      connected: z.boolean().describe('Whether the add-on answered at all.'),
+      addonVersion: z.string().nullable().describe('What the add-on says it is, or null if it did not answer.'),
+      expectedVersion: z.string().describe('What this server was written against.'),
+      upToDate: z.boolean().describe('False means the game is running an older script than the files on disk.'),
+      players: z.number().int().describe('How many players are in the world.'),
+      tick: z.number().int().describe("The world's tick counter — proof the answer is live."),
+      advice: z
+        .string()
+        .nullable()
+        .describe('What to do about it, in words that can be passed on to the person at the keyboard. Null when everything is fine.'),
+    },
+    annotations: { readOnlyHint: true },
+    handler: async () => {
+      try {
+        const header = headerOf(await bridge.request('ping'));
+        const addonVersion = String(header.version ?? 'unknown');
+        const upToDate = addonVersion === EXPECTED_ADDON_VERSION;
+        return {
+          connected: true,
+          addonVersion,
+          expectedVersion: EXPECTED_ADDON_VERSION,
+          upToDate,
+          players: Number(header.players ?? 0),
+          tick: Number(header.tick ?? 0),
+          advice: upToDate
+            ? null
+            : `The game is running add-on ${addonVersion} and this server expects ${EXPECTED_ADDON_VERSION}. ` +
+              `Copying the files over is not enough: pack folders are only scanned when Minecraft launches, ` +
+              `so the game has to be closed and reopened — reloading the world keeps the old script.`,
+        };
+      } catch (error) {
+        // Deliberately an answer rather than a failure. This is the tool someone reaches for
+        // *because* something is wrong, and throwing would make it the fourth thing that does
+        // not work rather than the one that explains the other three.
+        return {
+          connected: false,
+          addonVersion: null,
+          expectedVersion: EXPECTED_ADDON_VERSION,
+          upToDate: false,
+          players: 0,
+          tick: 0,
+          advice: error instanceof Error ? error.message : String(error),
+        };
+      }
+    },
+  });
+
 // --- reading one block -----------------------------------------------------------------------
 
 export const worldGetBlock = (bridge: WorldBridge) =>
@@ -373,6 +444,7 @@ export const worldContainer = (bridge: WorldBridge) =>
  */
 export function worldTools(bridge: WorldBridge): AnyToolDefinition[] {
   return [
+    worldBridgeStatus(bridge),
     worldGetBlock(bridge),
     worldReadRegion(bridge),
     worldEntities(bridge),

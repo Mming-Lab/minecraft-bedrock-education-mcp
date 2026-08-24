@@ -314,5 +314,29 @@ await test('a world that goes away leaves the transport unconnected', async () =
   await transport.close();
 });
 
+await test('a port already in use does not take the process down', async () => {
+  // socket-be registers no `error` handler on its WebSocketServer, and an emitter with no
+  // listener for `error` throws - so without the one added in the transport, a busy port
+  // would kill the whole MCP server, including the building tools, which never needed a port.
+  const first = await listen();
+  const second = new SocketBridgeTransport({ port: first.port, disableEncryption: true });
+  await second.listening;
+
+  assert.ok(second.listenFailure, 'the second listen should have failed');
+  assert.match(String(second.listenFailure.message), /EADDRINUSE|address already in use/i);
+
+  // And says something a person can act on, rather than repeating /connect at someone whose
+  // problem is not that they forgot to type it.
+  await assert.rejects(second.send('scriptevent mcp:ping ab12 {}'), (error) => {
+    assert.match(error.message, /could not listen on port/);
+    assert.match(error.message, /--port/);
+    assert.match(error.message, /Building tools are unaffected/);
+    return true;
+  });
+
+  await second.close();
+  await shutDown(first, null);
+});
+
 console.log(`\n${passed} passed, ${failed} failed`);
 process.exit(failed === 0 ? 0 : 1);

@@ -8,7 +8,7 @@
 
 import { McpServer } from '@modelcontextprotocol/server';
 import { z } from 'zod';
-import { allTools } from './tools/index.js';
+import { allTools, offlineBridge, toolsFor, type WorldBridge } from './tools/index.js';
 import { InvalidArgumentError } from './geometry/index.js';
 
 const NAME = '@mming-lab/minecraft-bedrock-education-mcp';
@@ -29,9 +29,12 @@ const VERSION = '0.1.0';
  * parameter and says what was wrong with it, so the next attempt has somewhere to go.
  */
 function toCallback(handler: (args: never) => unknown) {
-  return (args: unknown) => {
+  // Async because the world tools are: a region read is a round trip through the game, and
+  // several seconds of it. Awaiting a synchronous handler's plain value costs nothing, so
+  // both kinds go through the same path rather than the surface splitting in two.
+  return async (args: unknown) => {
     try {
-      const result = handler(args as never);
+      const result = await handler(args as never);
       return {
         content: [{ type: 'text' as const, text: JSON.stringify(result, null, 2) }],
         structuredContent: result as Record<string, unknown>,
@@ -52,19 +55,32 @@ function toCallback(handler: (args: never) => unknown) {
   };
 }
 
+export interface ServerOptions {
+  /**
+   * The connection to the game, for the `world.*` tools.
+   *
+   * Optional, and its absence changes the tool list not at all - an unbound server registers
+   * the same tools and answers a call to one of them by saying how to connect. A surface that
+   * shrank when nobody was connected would have the model conclude the server cannot read,
+   * which is a different problem from the one it has.
+   */
+  bridge?: WorldBridge;
+}
+
 /**
  * Creates a server with every tool registered.
  *
  * Called once per connection: `serveStdio` takes a factory rather than an instance, so each
- * connection gets its own registration state.
+ * connection gets its own registration state. The bridge is *not* created here, because there
+ * is one socket for the whole process and each MCP client shares it.
  */
-export function createServer(): McpServer {
+export function createServer(options: ServerOptions = {}): McpServer {
   const server = new McpServer({ name: NAME, version: VERSION });
 
-  // Registered in the order `allTools` declares, which is grouped by prefix. The spec asks
+  // Registered in the order `toolsFor` declares, which is grouped by prefix. The spec asks
   // for a deterministic `tools/list` because it lets clients cache the list and improves
   // prompt-cache hit rates on the model side.
-  for (const tool of allTools) {
+  for (const tool of toolsFor(options.bridge ?? offlineBridge)) {
     server.registerTool(
       tool.name,
       {

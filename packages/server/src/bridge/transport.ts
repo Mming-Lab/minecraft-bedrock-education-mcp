@@ -78,6 +78,7 @@ export class SocketBridgeTransport implements BridgeTransport {
   private readonly requestedPort: number;
   private readonly encrypted: boolean;
   private world: World | null = null;
+  private listenError: Error | null = null;
 
   /** Resolves once the port is bound, so a caller can print it - or read it back from port 0. */
   readonly listening: Promise<void>;
@@ -97,8 +98,24 @@ export class SocketBridgeTransport implements BridgeTransport {
     // a connecting game is sent is whatever is registered at that moment. `new
     // WebSocketServer` binds asynchronously, so registering here - synchronously, in the same
     // turn - is in time for the first connection, and only just.
+    // Resolves when the attempt is settled, either way - not only when it succeeds. socket-be
+    // registers no `error` handler on its WebSocketServer, and an EventEmitter with no
+    // listener for `error` throws: a port already in use would take the whole MCP server down,
+    // and with it the building tools, which need no port at all. Failing to listen should cost
+    // the reading tools and nothing else.
     this.listening = new Promise<void>((resolve) => {
       this.server.on(ServerEvent.Open, () => resolve());
+      this.server.network.wss.on('error', (error: unknown) => {
+        this.listenError = error instanceof Error ? error : new Error(String(error));
+        resolve();
+      });
+    });
+
+    // Same reason, one level down: socket-be attaches `message` and `close` to each socket but
+    // not `error`, so a game that dies mid-session - or any reset connection - would throw out
+    // of the emitter. `close` still follows, so there is nothing to do here but absorb it.
+    this.server.network.wss.on('connection', (socket: { on(event: string, listener: () => void): void }) => {
+      socket.on('error', () => {});
     });
 
     this.server.on(ServerEvent.PlayerMessage, (signal) => {
@@ -134,6 +151,29 @@ export class SocketBridgeTransport implements BridgeTransport {
     return this.world !== null;
   }
 
+  /** Why the port could not be opened, if it could not. Null while the socket is healthy. */
+  get listenFailure(): Error | null {
+    return this.listenError;
+  }
+
+  /**
+   * What to tell someone who asked the world a question and there is no world.
+   *
+   * "Not connected" is true in both cases and useless in one of them: if the port never
+   * opened, no amount of typing `/connect` will help, and the thing to say is which port to
+   * try instead.
+   */
+  private noWorldMessage(): string {
+    if (this.listenError !== null) {
+      return (
+        `the bridge could not listen on port ${this.requestedPort}: ${this.listenError.message}. ` +
+        `Another program is probably using it. Start the server again with a different --port, ` +
+        `and use that port in /connect. Building tools are unaffected.`
+      );
+    }
+    return `Minecraft is not connected. In the game, open the chat and run /connect localhost:${this.port}.`;
+  }
+
   /**
    * Waits for a game to connect.
    *
@@ -160,10 +200,12 @@ export class SocketBridgeTransport implements BridgeTransport {
           this.waiting.delete(wake);
           reject(
             new BridgeTransportError(
-              `no world connected within ${timeoutMs}ms. In the game, run /connect localhost:${this.port}. ` +
-                `If that was already done and nothing happened, check the encryption setting: this server ` +
-                `${this.encrypted ? 'negotiates encryption' : 'refuses encryption'}, and a game set the ` +
-                `other way accepts the /connect and then stays silent.`
+              this.listenError !== null
+                ? `no world connected within ${timeoutMs}ms: ${this.noWorldMessage()}`
+                : `no world connected within ${timeoutMs}ms. In the game, run /connect localhost:${this.port}. ` +
+                  `If that was already done and nothing happened, check the encryption setting: this server ` +
+                  `${this.encrypted ? 'negotiates encryption' : 'refuses encryption'}, and a game set the ` +
+                  `other way accepts the /connect and then stays silent.`
             )
           );
         }, timeoutMs);
@@ -183,11 +225,7 @@ export class SocketBridgeTransport implements BridgeTransport {
    */
   async send(commandLine: string): Promise<void> {
     const world = this.world;
-    if (world === null) {
-      throw new BridgeTransportError(
-        `Minecraft is not connected. In the game, run /connect localhost:${this.port}.`
-      );
-    }
+    if (world === null) throw new BridgeTransportError(this.noWorldMessage());
 
     try {
       await world.runCommand(commandLine, { timeout: this.commandTimeoutMs });

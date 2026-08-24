@@ -34,9 +34,13 @@ console.log('server over stdio');
 
 const transport = new StdioClientTransport({
   command: process.execPath,
-  args: [ENTRY],
-  // The server writes nothing to stderr in normal operation; capturing it keeps a crash
-  // from being mistaken for a protocol error.
+  // Port 0 so the test never fights over 19131 - with another test, with a developer's own
+  // server, or with a game that happens to be connected to one. The bridge opens a real
+  // socket on startup, so a fixed port would make this test fail for reasons that have
+  // nothing to do with the tool surface it is checking.
+  args: [ENTRY, '--port', '0'],
+  // The server announces the port it is listening on over stderr; capturing it keeps that,
+  // and a crash, from being mistaken for a protocol error.
   stderr: 'pipe',
 });
 
@@ -137,6 +141,21 @@ try {
       tools.map((t) => t.name),
       'tools/list returned a different order on the second call'
     );
+  });
+
+  await test('reading the world with nothing connected says what to do about it', async () => {
+    // The whole point of registering the world tools whether or not a game is there. This is
+    // the real process on a real socket with nobody on the other end, which is exactly the
+    // state a teacher's machine is in for the first minute after starting the server.
+    const result = await client.callTool({
+      name: 'world.read_region',
+      arguments: { corner1: { x: 0, y: 64, z: 0 }, corner2: { x: 3, y: 67, z: 3 } },
+    });
+
+    assert.ok(result.isError, 'should be a tool error the model can act on, not a success');
+    const text = result.content.map((block) => block.text ?? '').join(' ');
+    // Actionable, and addressed to the person who can act: the model cannot type /connect.
+    assert.match(text, /\/connect localhost:\d+/);
   });
 
   await test('calling a tool returns structured content', async () => {

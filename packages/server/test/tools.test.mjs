@@ -236,6 +236,10 @@ test('every build tool produces output matching its own schema', () => {
   };
 
   for (const tool of allTools) {
+    // Building only. A world tool's output comes from the game, so exercising it needs a
+    // bridge rather than a sample argument list; test/world-tools.test.mjs does that against
+    // a stand-in add-on.
+    if (!tool.name.startsWith('build.')) continue;
     const args = samples[tool.name];
     assert.ok(args, `no sample call for ${tool.name} — add one`);
     const r = call(tool.name, args);

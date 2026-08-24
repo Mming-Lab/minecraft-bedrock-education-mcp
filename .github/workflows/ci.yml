@@ -36,18 +36,18 @@ jobs:
         working-directory: packages/server
         run: node test/tools.test.mjs
 
-      # Spawns the built server and drives it with a real MCP client. A schema the SDK
-      # rejects or a result that fails output validation passes the step above and fails
-      # here, which is the point of running both.
-      # Searches the parameter space for inputs that break an invariant, rather than
-      # checking the handful a fixed case happens to cover. It found a helix that came out
-      # in two pieces at a radius no golden case used.
+      # Searches the parameter space for inputs that break an invariant, rather than checking
+      # the handful a fixed case happens to cover. It found a helix that came out in two
+      # pieces at a radius no golden case used.
       - name: Geometry properties
         working-directory: packages/server
         run: node test/geometry.property.test.mjs
         env:
           PROPERTY_RUNS: 500
 
+      # Spawns the built server and drives it with a real MCP client. A schema the SDK
+      # rejects or a result that fails output validation passes the steps above and fails
+      # here, which is the point of running all three.
       - name: Server over stdio
         working-directory: packages/server
         run: node test/server.test.mjs

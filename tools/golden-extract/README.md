@@ -42,10 +42,14 @@ npm run extract            # regenerate tests/golden/ from src/utils/
 npm run validate:legacy    # self-test: must FAIL on the bug-fixed cases
 ```
 
-`validate:legacy` pointing at the legacy code is the suite's own test. It should report
-**49 passed, 17 failed** — the failures being exactly the ten `bug-fixed` and seven
-`undefined-behavior` cases. If it ever passes everything, the inverted assertion has
-stopped working and the goldens are no longer protecting anything.
+`validate:legacy` pointing at the legacy code is the suite's own test. The **17 failures**
+are the invariant that matters: exactly the ten `bug-fixed` and seven `undefined-behavior`
+cases. If it ever passes everything, the inverted assertion has stopped working and the
+goldens are no longer protecting anything.
+
+(The passing count moves as verdicts are assigned — a case reclassified from `equivalent` to
+`spec-change` becomes informational rather than passing. The failure count is the part to
+watch.)
 
 To check a rewrite:
 

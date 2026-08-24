@@ -34,7 +34,9 @@ if (!args.has('geometry') || !args.has('math')) {
   process.exit(2);
 }
 
-const toUrl = (p) => 'file:///' + path.resolve(HERE, p).split(path.sep).join('/');
+// Resolved against the working directory, not this file's, so the paths a caller types are
+// the paths they see in their shell.
+const toUrl = (p) => 'file:///' + path.resolve(process.cwd(), p).split(path.sep).join('/');
 
 const geometry = await import(toUrl(args.get('geometry')));
 const mathLib = await import(toUrl(args.get('math')));

@@ -114,16 +114,25 @@ export function summariseBuild(
 // --- tool definition -------------------------------------------------------------------------
 
 /**
+ * The shape a tool's schemas take.
+ *
+ * The SDK declares its own `ZodRawShape` as `Record<string, z.ZodType>`. Zod 4 exports a
+ * `ZodRawShape` too, but it resolves to the core `$ZodType` rather than the classic
+ * `ZodType`, so the two do not unify. Matching the SDK's spelling here keeps registration
+ * assignable without a cast.
+ */
+export type ToolSchemaShape = Record<string, z.ZodType>;
+
+/**
  * A tool as data.
  *
- * `inputSchema` and `outputSchema` are Zod raw shapes because that is what the SDK's
- * `registerTool` takes. `outputSchema` is required here even though the SDK treats it as
- * optional — the legacy server had no notion of it at all, so every result was an
- * unstructured blob of text the model had to parse back out.
+ * `outputSchema` is required here even though the SDK treats it as optional. The legacy
+ * server had no notion of it at all, so every result arrived as an unstructured blob of text
+ * that the model had to parse back out.
  */
 export interface ToolDefinition<
-  Input extends z.ZodRawShape = z.ZodRawShape,
-  Output extends z.ZodRawShape = z.ZodRawShape,
+  Input extends ToolSchemaShape = ToolSchemaShape,
+  Output extends ToolSchemaShape = ToolSchemaShape,
 > {
   /** Dot-separated, e.g. `build.sphere`. The prefix groups tools that belong together. */
   name: string;
@@ -150,11 +159,11 @@ export interface ToolDefinition<
  * argument here keeps every individual definition fully typed, which is where the checking
  * is worth having.
  */
-export type AnyToolDefinition = Omit<ToolDefinition<z.ZodRawShape, z.ZodRawShape>, 'handler'> & {
+export type AnyToolDefinition = Omit<ToolDefinition<ToolSchemaShape, ToolSchemaShape>, 'handler'> & {
   handler: (args: never) => unknown;
 };
 
-export function defineTool<Input extends z.ZodRawShape, Output extends z.ZodRawShape>(
+export function defineTool<Input extends ToolSchemaShape, Output extends ToolSchemaShape>(
   definition: ToolDefinition<Input, Output>
 ): ToolDefinition<Input, Output> {
   return definition;

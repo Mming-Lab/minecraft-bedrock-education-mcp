@@ -12,6 +12,19 @@
     "zod": "^4.2.0"
   },
   "devDependencies": {
+    "@modelcontextprotocol/client": "^2.0.0",
     "typescript": "5.9.3"
+  },
+  "bin": {
+    "minecraft-bedrock-education-mcp": "./dist/index.js"
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc -p .",
+    "test": "npm run build && node test/tools.test.mjs && node test/server.test.mjs",
+    "test:golden": "node ../../tools/golden-extract/validate.mjs --geometry ./test/golden-adapter.mjs --math ./test/golden-adapter.mjs",
+    "start": "node dist/index.js"
   }
 }

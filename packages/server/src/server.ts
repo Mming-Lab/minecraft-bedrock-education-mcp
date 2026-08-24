@@ -8,7 +8,8 @@
 
 import { McpServer } from '@modelcontextprotocol/server';
 import { z } from 'zod';
-import { allTools, offlineBridge, toolsFor, type WorldBridge } from './tools/index.js';
+import { allTools, offlineBridge, offlineRunner, toolsFor, type WorldBridge } from './tools/index.js';
+import type { CommandRunner } from './bridge/index.js';
 import { InvalidArgumentError } from './geometry/index.js';
 
 const NAME = '@mming-lab/minecraft-bedrock-education-mcp';
@@ -65,6 +66,14 @@ export interface ServerOptions {
    * which is a different problem from the one it has.
    */
   bridge?: WorldBridge;
+  /**
+   * The connection the building tools place blocks over.
+   *
+   * Separate from the bridge because they are different conversations with the same socket:
+   * reading goes through the add-on and waits for chat, while building runs commands and
+   * reads their replies. One transport supplies both.
+   */
+  runner?: CommandRunner;
 }
 
 /**
@@ -80,7 +89,7 @@ export function createServer(options: ServerOptions = {}): McpServer {
   // Registered in the order `toolsFor` declares, which is grouped by prefix. The spec asks
   // for a deterministic `tools/list` because it lets clients cache the list and improves
   // prompt-cache hit rates on the model side.
-  for (const tool of toolsFor(options.bridge ?? offlineBridge)) {
+  for (const tool of toolsFor(options.bridge ?? offlineBridge, options.runner ?? offlineRunner)) {
     server.registerTool(
       tool.name,
       {

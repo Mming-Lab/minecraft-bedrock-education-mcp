@@ -92,4 +92,6 @@ void transport.listening.then(() => {
   process.stderr.write(`${lines.join('\n')}\n`);
 });
 
-serveStdio(() => createServer({ bridge }));
+// The same socket, in both of its roles: the bridge fires `scriptevent` and listens for the
+// add-on's chat, while building runs `/fill` and reads the game's reply.
+serveStdio(() => createServer({ bridge, runner: transport }));

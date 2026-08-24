@@ -36,7 +36,7 @@
  */
 
 import { Server, ServerEvent, type World } from 'socket-be';
-import type { BridgeTransport } from './client.js';
+import type { BridgeTransport, CommandOutcome, CommandRunner } from './client.js';
 
 /** What `/connect localhost:19131` reaches. Bedrock has no default of its own. */
 export const DEFAULT_PORT = 19131;
@@ -70,7 +70,7 @@ export class BridgeTransportError extends Error {
  * several machines pointed at this port, and picking the latest would mean a student joining
  * mid-read silently taking the channel away from a request already in flight.
  */
-export class SocketBridgeTransport implements BridgeTransport {
+export class SocketBridgeTransport implements BridgeTransport, CommandRunner {
   private readonly server: Server;
   private readonly listeners = new Set<(message: string) => void>();
   private readonly waiting = new Set<() => void>();
@@ -224,11 +224,26 @@ export class SocketBridgeTransport implements BridgeTransport {
    * socket-be itself reports: a closed connection, or no acknowledgement at all.
    */
   async send(commandLine: string): Promise<void> {
+    await this.run(commandLine);
+  }
+
+  /**
+   * Sends a command and returns what the game said about it.
+   *
+   * Same trip as {@link send}, with the answer kept. Placing blocks wants it; the bridge
+   * does not, because a `scriptevent`'s real answer arrives later over chat.
+   */
+  async run(commandLine: string): Promise<CommandOutcome> {
     const world = this.world;
     if (world === null) throw new BridgeTransportError(this.noWorldMessage());
 
     try {
-      await world.runCommand(commandLine, { timeout: this.commandTimeoutMs });
+      const result = await world.runCommand(commandLine, { timeout: this.commandTimeoutMs });
+      return {
+        commandLine,
+        statusCode: typeof result.statusCode === 'number' ? result.statusCode : 0,
+        statusMessage: typeof result.statusMessage === 'string' ? result.statusMessage : '',
+      };
     } catch (error) {
       throw new BridgeTransportError(
         `the game did not acknowledge ${JSON.stringify(commandLine.slice(0, 60))}: ${

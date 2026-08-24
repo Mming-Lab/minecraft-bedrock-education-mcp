@@ -85,6 +85,43 @@ export const BuildResult = z.object({
 export type BuildResultValue = z.infer<typeof BuildResult>;
 
 /**
+ * A shape worked out but not yet placed.
+ *
+ * The positions ride along because something has to actually build it, and the packer that
+ * turns them into `/fill` commands needs them. They are stripped before the result leaves the
+ * server: a radius-8 sphere is over two thousand coordinates and the model asked for a
+ * sphere, not a list.
+ */
+export interface PlannedBuild extends BuildResultValue {
+  readonly positions: readonly Position[];
+}
+
+/**
+ * What a build tool returns once it has been built.
+ *
+ * The extra fields are about the sending, not the shape, and they are deliberately factual
+ * rather than a verdict. Bedrock's status codes do not mean what they look like they mean -
+ * `0 blocks filled` is negative and describes a command that ran - so this reports what the
+ * game said and leaves the judging to whoever reads the blocks afterwards.
+ */
+export const BuildOutcome = BuildResult.extend({
+  commandCount: z
+    .number()
+    .int()
+    .describe('How many /fill commands the shape packed down to.'),
+  unsent: z
+    .array(z.object({ commandLine: z.string(), reason: z.string() }))
+    .describe('Commands that never reached the game. These are real failures.'),
+  negative: z
+    .array(z.object({ commandLine: z.string(), statusMessage: z.string() }))
+    .describe(
+      'Commands the game answered with a negative status. Usually harmless — "0 blocks filled" ' +
+        'means nothing matched, and "cannot be placed" means the block was already there. ' +
+        'To find out whether the shape is actually in the world, read it with world.read_region.'
+    ),
+});
+
+/**
  * Turns a computed position list into the summary above.
  *
  * Throws rather than returning an empty summary when the shape has no blocks: a build that
@@ -94,7 +131,7 @@ export function summariseBuild(
   positions: readonly Position[],
   block: string,
   hollow?: boolean
-): BuildResultValue {
+): PlannedBuild {
   if (positions.length === 0) {
     throw new Error('the shape produced no blocks; check the radius and height arguments');
   }
@@ -114,6 +151,7 @@ export function summariseBuild(
     bounds: { min: { x: minX, y: minY, z: minZ }, max: { x: maxX, y: maxY, z: maxZ } },
     block,
     ...(hollow === undefined ? {} : { hollow }),
+    positions,
   };
 }
 

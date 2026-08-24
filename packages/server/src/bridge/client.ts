@@ -29,6 +29,33 @@ export interface BridgeTransport {
   onChat(listener: (message: string) => void): () => void;
 }
 
+/** What Bedrock says back about a command. */
+export interface CommandOutcome {
+  readonly commandLine: string;
+  /**
+   * Bedrock's own code, passed through unjudged.
+   *
+   * Negative does not mean refused. `0 blocks filled` is negative and describes a fill that
+   * ran; `that block cannot be placed` is negative and means it was already there. Deciding
+   * which is which cannot be done from here, and reading the message instead is worse - the
+   * game answers in the client's language.
+   */
+  readonly statusCode: number;
+  readonly statusMessage: string;
+}
+
+/**
+ * Running a command and hearing the answer.
+ *
+ * Separate from {@link BridgeTransport} because the two have different needs of the same
+ * socket: the bridge fires a `scriptevent` and listens for chat, while placing blocks wants
+ * what the game said about each `/fill`. A transport may implement both, and the parts that
+ * use them are tested against neither.
+ */
+export interface CommandRunner {
+  run(commandLine: string): Promise<CommandOutcome>;
+}
+
 export interface BridgeOptions {
   /**
    * How long to wait for the first line of an answer.

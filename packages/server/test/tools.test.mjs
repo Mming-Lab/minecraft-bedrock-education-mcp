@@ -9,7 +9,7 @@
 
 import assert from 'node:assert/strict';
 import { z } from 'zod';
-import { allTools } from '../dist/tools/index.js';
+import { allTools, buildTools } from '../dist/tools/index.js';
 
 let passed = 0;
 let failed = 0;
@@ -104,7 +104,11 @@ test('every declared parameter carries a description', () => {
 
 // --- handlers -------------------------------------------------------------------------------
 
-const byName = new Map(allTools.map((t) => [t.name, t]));
+// The shape tools before they are bound to a connection. What is being checked below is the
+// geometry - which blocks a shape covers - and that is settled before anything is sent. The
+// bound form is asynchronous because it places what it computed; test/placer.test.mjs covers
+// the placing, and the structural checks above run against the bound surface.
+const byName = new Map(buildTools.map((t) => [t.name, t]));
 
 /** Runs a tool through its own schemas, the way the SDK will. */
 function call(name, args) {
@@ -235,11 +239,7 @@ test('every build tool produces output matching its own schema', () => {
     'build.curve': { start: { x: 0, y: 64, z: 0 }, end: { x: 20, y: 64, z: 0 }, controlPoints: [{ x: 10, y: 74, z: 0 }], block: 'stone' },
   };
 
-  for (const tool of allTools) {
-    // Building only. A world tool's output comes from the game, so exercising it needs a
-    // bridge rather than a sample argument list; test/world-tools.test.mjs does that against
-    // a stand-in add-on.
-    if (!tool.name.startsWith('build.')) continue;
+  for (const tool of buildTools) {
     const args = samples[tool.name];
     assert.ok(args, `no sample call for ${tool.name} — add one`);
     const r = call(tool.name, args);

@@ -10,7 +10,9 @@ import assert from 'node:assert/strict';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { Client } from '@modelcontextprotocol/client';
+import net from 'node:net';
 import { StdioClientTransport } from '@modelcontextprotocol/client/stdio';
+import { FakeGame, sleep } from './fake-game.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const ENTRY = path.join(HERE, '..', 'dist', 'index.js');
@@ -32,13 +34,33 @@ async function test(name, fn) {
 
 console.log('server over stdio');
 
+/**
+ * A port the OS has just confirmed is free.
+ *
+ * Asked for and released rather than assumed: the child process opens a real WebSocket, and a
+ * hard-coded port would make this test fail whenever anything else on the machine happened to
+ * be using it - including a previous run of the live probe.
+ */
+async function freePort() {
+  const probe = net.createServer();
+  return new Promise((resolve, reject) => {
+    probe.on('error', reject);
+    probe.listen(0, '127.0.0.1', () => {
+      const { port } = probe.address();
+      probe.close(() => resolve(port));
+    });
+  });
+}
+
+const PORT = await freePort();
+
 const transport = new StdioClientTransport({
   command: process.execPath,
-  // Port 0 so the test never fights over 19131 - with another test, with a developer's own
-  // server, or with a game that happens to be connected to one. The bridge opens a real
-  // socket on startup, so a fixed port would make this test fail for reasons that have
-  // nothing to do with the tool surface it is checking.
-  args: [ENTRY, '--port', '0'],
+  // A port the OS just told us was free, rather than 19131 - the test must not fight with
+  // another test, with a developer's own server, or with a game connected to a real one. Not
+  // port 0, because the fake game has to dial back in and would have no way to learn which
+  // port the child ended up on. Encryption off because the fake does not do ECDH.
+  args: [ENTRY, '--port', String(PORT), '--no-encryption', 'true'],
   // The server announces the port it is listening on over stderr; capturing it keeps that,
   // and a crash, from being mistaken for a protocol error.
   stderr: 'pipe',
@@ -47,6 +69,8 @@ const transport = new StdioClientTransport({
 const client = new Client({ name: 'test-harness', version: '0.0.0' });
 
 let tools = [];
+/** The fake game, once it has dialled in partway through. Closed in the teardown below. */
+let game = null;
 
 try {
   await client.connect(transport);
@@ -158,7 +182,17 @@ try {
     assert.match(text, /\/connect localhost:\d+/);
   });
 
-  await test('calling a tool returns structured content', async () => {
+  // --- from here on, a game is on the other end -------------------------------------------
+  //
+  // Everything above ran with nothing connected, which is the state the server starts in.
+  // What follows is the whole path end to end: an MCP call over stdio, into the server, out
+  // over the WebSocket as a Bedrock command, and back. The fake speaks the frames a recorded
+  // session showed the real game speaking.
+  game = await FakeGame.connect(PORT);
+  await sleep(120);
+
+  await test('calling a tool returns structured content — and the fill reaches the game', async () => {
+    const before = game.commands.length;
     const result = await client.callTool({
       name: 'build.cube',
       arguments: {
@@ -172,6 +206,42 @@ try {
     assert.ok(result.structuredContent, 'no structuredContent returned');
     assert.equal(result.structuredContent.blockCount, 64);
     assert.equal(result.structuredContent.block, 'stone');
+
+    // The half that was missing until the executor existed: before it, this tool returned
+    // exactly the same summary and placed nothing at all.
+    const fills = game.commands.slice(before).filter((line) => line.startsWith('fill '));
+    assert.equal(fills.length, 1, `expected one fill, got ${JSON.stringify(game.commands.slice(before))}`);
+    assert.equal(fills[0], 'fill 0 64 0 3 67 3 minecraft:stone replace');
+    assert.equal(result.structuredContent.commandCount, 1);
+  });
+
+  await test('reading a region comes back as a layer grid', async () => {
+    // The add-on's side of the conversation, in the shape the real one answers in: a header
+    // saying how many parts follow, then the parts.
+    game.addon = (commandLine) => {
+      if (!commandLine.startsWith('scriptevent mcp:readregion')) return [];
+      const id = commandLine.split(' ')[2];
+      const blocks = ['stone', 'stone', 'air', 'air', 'stone', 'stone', 'air', 'air'];
+      return [
+        `MCPB|${id}|{"ok":true,"total":8,"parts":1}`,
+        `MCPB|${id}.0|{"part":0,"blocks":${JSON.stringify(blocks)}}`,
+      ];
+    };
+
+    const result = await client.callTool({
+      name: 'world.read_region',
+      arguments: { corner1: { x: 0, y: 64, z: 0 }, corner2: { x: 1, y: 65, z: 1 } },
+    });
+
+    assert.ok(!result.isError, `read failed: ${JSON.stringify(result.content)}`);
+    const region = result.structuredContent;
+    assert.deepEqual(region.size, { x: 2, y: 2, z: 2 });
+    // Bottom layer is solid, top is empty: the grid keeps the arrangement, which is the whole
+    // reason it is a grid and not a list of names.
+    assert.deepEqual(region.layers[0].rows, ['aa', 'aa']);
+    assert.deepEqual(region.layers[1].rows, ['..', '..']);
+    assert.equal(region.palette.a, 'stone');
+    assert.equal(region.unknown, 0);
   });
 
   await test('the text block mirrors the structured result', async () => {
@@ -243,6 +313,9 @@ try {
     await assert.rejects(client.callTool({ name: 'build.nonexistent', arguments: {} }));
   });
 } finally {
+  // The game first: closing the socket lets the server clear the per-world polling
+  // interval before the process is asked to go.
+  if (game) await game.close().catch(() => {});
   await client.close().catch(() => {});
 }
 

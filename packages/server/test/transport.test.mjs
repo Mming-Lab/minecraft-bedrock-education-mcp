@@ -16,7 +16,7 @@
 // detail that a `tell` arrives with no `[name]` prefix while a `say` arrives with one.
 
 import assert from 'node:assert/strict';
-import { WebSocket } from 'ws';
+import { FakeGame, sleep } from './fake-game.mjs';
 
 import { BridgeClient } from '../dist/bridge/client.js';
 import { BridgeTransportError, SocketBridgeTransport } from '../dist/bridge/transport.js';
@@ -36,98 +36,6 @@ function test(name, fn) {
       console.log(`  FAIL ${name}`);
       console.log(`       ${(error.stack ?? error.message).split('\n').slice(0, 4).join('\n       ')}`);
     });
-}
-
-const PLAYER = 'Kai_U';
-const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
-
-/**
- * A WebSocket client that answers like Bedrock does.
- *
- * It records the `subscribe` frames it is sent, answers `commandRequest` with a
- * `commandResponse` carrying the same `requestId`, and can push `PlayerMessage` events - which
- * is how a script inside the game speaks, since chat is the only path back to the socket.
- *
- * `addon` stands in for the pack: given a command line it returns the lines the pack would
- * say. Returning fewer lines than the header promises is how a dropped chat line is
- * simulated, and that is the failure that has to stay visible.
- */
-class FakeGame {
-  constructor(ws) {
-    this.ws = ws;
-    this.subscribed = [];
-    this.commands = [];
-    this.addon = () => [];
-  }
-
-  static async connect(port) {
-    const ws = new WebSocket(`ws://127.0.0.1:${port}`);
-    const game = new FakeGame(ws);
-    // Before the open handshake resolves, not after. The server subscribes the moment the
-    // connection lands, and `ws` drops a message that arrives with no listener attached - so
-    // waiting for `open` first loses exactly the frames this file exists to check. The same
-    // ordering mistake as the one being tested for, one layer down.
-    ws.on('message', (data) => game.receive(data));
-    await new Promise((resolve, reject) => {
-      ws.once('open', resolve);
-      ws.once('error', reject);
-    });
-    return game;
-  }
-
-  receive(data) {
-    const frame = JSON.parse(data.toString());
-    const { messagePurpose, requestId } = frame.header;
-
-    if (messagePurpose === 'subscribe') {
-      this.subscribed.push(frame.body.eventName);
-      return;
-    }
-    if (messagePurpose !== 'commandRequest') return;
-
-    const commandLine = frame.body.commandLine;
-    this.commands.push(commandLine);
-
-    // The two socket-be asks for on its own, before anything of ours is sent. Left
-    // unanswered they only log, but answering keeps the noise out of a failing test's output.
-    if (commandLine === 'getlocalplayername') {
-      this.respond(requestId, { statusCode: 0, localplayername: PLAYER });
-      return;
-    }
-    if (commandLine === 'list') {
-      this.respond(requestId, { statusCode: 0, players: PLAYER, current: 1, max: 8 });
-      return;
-    }
-
-    this.respond(requestId, { statusCode: 0, statusMessage: '' });
-    for (const line of this.addon(commandLine)) {
-      // On a later turn, as chat is: no reply arrives inside the command's own response.
-      setTimeout(() => this.say(line), 5);
-    }
-  }
-
-  respond(requestId, body) {
-    this.send({ header: { version: 1, requestId, messagePurpose: 'commandResponse' }, body });
-  }
-
-  /** A `tell` - which arrives bare, unlike `say`, which arrives as `[Name] message`. */
-  say(message, { type = 'tell', sender = PLAYER } = {}) {
-    this.send({
-      header: { version: 1, requestId: '00000000-0000-0000-0000-000000000000', messagePurpose: 'event', eventName: 'PlayerMessage' },
-      body: { type, message, sender, receiver: type === 'tell' ? PLAYER : '' },
-    });
-  }
-
-  send(frame) {
-    this.ws.send(JSON.stringify(frame));
-  }
-
-  close() {
-    return new Promise((resolve) => {
-      this.ws.once('close', resolve);
-      this.ws.close();
-    });
-  }
 }
 
 /**

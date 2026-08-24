@@ -141,5 +141,44 @@ await test('with nothing connected it says how to connect', async () => {
   );
 });
 
+console.log('\nworld.agent');
+
+const agentTool = (runner) => toolsFor(offlineBridge, runner).find((tool) => tool.name === 'world.agent');
+
+await test('the agent is found through querytarget, not through agent create', async () => {
+  // socket-be's getOrCreateAgent() never assigns to its own cache, so every call sends
+  // `agent create`. A tool built on it would summon an agent as a side effect of asking
+  // whether one exists. Asking a question must not change the answer.
+  const runner = runnerReturning({
+    details: JSON.stringify([{ dimension: 0, position: { x: 10.5, y: 64, z: -3.5 }, uniqueId: 'agent-1', yRot: -90 }]),
+  });
+  const result = await agentTool(runner).handler({});
+
+  assert.deepEqual(runner.sent, ['querytarget @e[type=agent]']);
+  for (const command of runner.sent) {
+    assert.ok(!command.includes('agent create'), `a read summoned an agent: ${command}`);
+  }
+  assert.equal(result.exists, true);
+  assert.equal(result.x, 10.5, 'agent positions are block centres, so .5 is expected');
+  assert.equal(result.facing, -90);
+});
+
+await test('no agent is an answer, not a failure', async () => {
+  // The ordinary state of a fresh world. Raising here would push a caller towards summoning
+  // one just to make the error go away.
+  const runner = runnerReturning({ statusMessage: '対象が見つかりませんでした' });
+  const result = await agentTool(runner).handler({});
+
+  assert.equal(result.exists, false);
+  assert.equal(result.x, null);
+  assert.equal(result.uniqueId, null);
+});
+
+await test('an empty target list is also just no agent', async () => {
+  const runner = runnerReturning({ details: '[]' });
+  const result = await agentTool(runner).handler({});
+  assert.equal(result.exists, false);
+});
+
 console.log(`\n${passed} passed, ${failed} failed`);
 process.exit(failed === 0 ? 0 : 1);

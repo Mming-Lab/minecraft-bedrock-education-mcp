@@ -37,6 +37,54 @@ interface QueryTargetEntry {
 /** Which dimension a number means, in the order the game numbers them. */
 const DIMENSION_NAMES = ['overworld', 'nether', 'the_end'] as const;
 
+export interface LocatedEntity {
+  readonly x: number;
+  readonly y: number;
+  readonly z: number;
+  readonly dimension: string;
+  readonly facing: number;
+  readonly uniqueId: string;
+}
+
+/**
+ * Reads the positions out of a `querytarget` reply, or says why it could not.
+ *
+ * `null` means the game answered without a `details` field, which is what happens when the
+ * selector matched nothing. Whether that is a problem depends on what was asked for - no
+ * players is odd, no agent is ordinary - so the decision belongs to the caller rather than
+ * here.
+ */
+function parseTargets(details: unknown): LocatedEntity[] | null {
+  if (typeof details !== 'string') return null;
+
+  let entries: unknown;
+  try {
+    entries = JSON.parse(details);
+  } catch {
+    throw new Error(`querytarget's reply was not JSON: ${details.slice(0, 120)}`);
+  }
+  if (!Array.isArray(entries)) {
+    throw new Error('querytarget answered with something other than a list of targets');
+  }
+
+  return entries.flatMap((entry) => {
+    const { position, uniqueId, yRot, dimension } = entry as QueryTargetEntry;
+    // Skipped rather than defaulted to the origin: a target at 0,0,0 and one whose position
+    // did not arrive are different things, and one of them is a real place.
+    if (position?.x === undefined || position.y === undefined || position.z === undefined) return [];
+    return [
+      {
+        x: position.x,
+        y: position.y,
+        z: position.z,
+        dimension: DIMENSION_NAMES[dimension ?? 0] ?? `dimension ${dimension}`,
+        facing: yRot ?? 0,
+        uniqueId: uniqueId ?? 'unknown',
+      },
+    ];
+  });
+}
+
 export const worldPlayersTool = (runner: CommandRunner) =>
   defineTool({
     name: 'world.players',
@@ -72,44 +120,68 @@ export const worldPlayersTool = (runner: CommandRunner) =>
       // The answer is in `details`, as a JSON string. Not in `statusMessage` - that carries the
       // same JSON with a translated sentence in front of it ("対象となるデータ: [...]"), which is
       // why the message is not what gets parsed.
-      const details = outcome.data['details'];
-      if (typeof details !== 'string') {
+      const players = parseTargets(outcome.data['details']);
+      if (players === null) {
+        // No players at all, with an MCP session attached to the world, is odd enough to be
+        // worth raising rather than reporting as an empty room.
         throw new Error(
           `querytarget answered without a "details" field. The game said: ${outcome.statusMessage || '(nothing)'}`
         );
       }
 
-      let entries: unknown;
-      try {
-        entries = JSON.parse(details);
-      } catch {
-        throw new Error(`querytarget's reply was not JSON: ${details.slice(0, 120)}`);
-      }
-      if (!Array.isArray(entries)) {
-        throw new Error('querytarget answered with something other than a list of targets');
-      }
-
-      const players = entries.flatMap((entry) => {
-        const { position, uniqueId, yRot, dimension } = entry as QueryTargetEntry;
-        // Skipped rather than defaulted to the origin: a player at 0,0,0 and a player whose
-        // position did not arrive are different things, and one of them is a real place.
-        if (position?.x === undefined || position.y === undefined || position.z === undefined) return [];
-        return [
-          {
-            x: position.x,
-            y: position.y,
-            z: position.z,
-            dimension: DIMENSION_NAMES[dimension ?? 0] ?? `dimension ${dimension}`,
-            facing: yRot ?? 0,
-            uniqueId: uniqueId ?? 'unknown',
-          },
-        ];
-      });
-
       return { players, count: players.length };
     },
   });
 
+/**
+ * The Agent - the robot the Education Edition builds lessons around.
+ *
+ * Two commands can find it, and the difference matters. `agent getposition` returns only
+ * coordinates; `querytarget @e[type=agent]` returns the same JSON shape as the player query,
+ * with rotation and identity as well. The second is used here, so one parser covers both.
+ *
+ * ## Why this must not summon anything
+ *
+ * socket-be offers `getOrCreateAgent()`, and it is a trap: it never assigns to its own cache,
+ * so every call sends `agent create`. A tool built on it would summon an agent as a side
+ * effect of asking whether one exists - which turns "where is the agent" into "there is one
+ * now, at the player". Asking a question must not change the answer.
+ *
+ * So an absent agent is reported as absent. Summoning is a separate, deliberate act.
+ */
+export const worldAgentTool = (runner: CommandRunner) =>
+  defineTool({
+    name: 'world.agent',
+    title: 'Where the agent is',
+    description: [
+      "Find the Education Edition Agent — the robot — and report where it is, which way it faces, and which dimension it is in.",
+      'Use this before moving the agent or building relative to it, and to check whether an agent exists at all.',
+      'A world with no agent comes back as exists: false. That is an answer, not a failure — an agent has to be summoned before it exists, and this tool deliberately will not do that: asking where something is must not create it.',
+      'Do NOT use this to find players — world.players does that, and an agent is not a player.',
+    ].join(' '),
+    inputSchema: {},
+    outputSchema: {
+      exists: z.boolean().describe('False means no agent has been summoned in this world.'),
+      x: z.number().nullable().describe('Block centre, so .5 offsets are normal here.'),
+      y: z.number().nullable(),
+      z: z.number().nullable(),
+      dimension: z.string().nullable(),
+      facing: z.number().nullable().describe('Degrees, -180 to 180.'),
+      uniqueId: z.string().nullable(),
+    },
+    annotations: { readOnlyHint: true, idempotentHint: true },
+    handler: async () => {
+      const outcome = await runner.run('querytarget @e[type=agent]');
+      const found = parseTargets(outcome.data['details']);
+      const agent = found?.[0];
+
+      if (!agent) {
+        return { exists: false, x: null, y: null, z: null, dimension: null, facing: null, uniqueId: null };
+      }
+      return { exists: true, ...agent };
+    },
+  });
+
 export function playerTools(runner: CommandRunner): AnyToolDefinition[] {
-  return [worldPlayersTool(runner)] as unknown as AnyToolDefinition[];
+  return [worldPlayersTool(runner), worldAgentTool(runner)] as unknown as AnyToolDefinition[];
 }

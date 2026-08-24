@@ -29,24 +29,18 @@ for (let i = 2; i < process.argv.length; i += 2) {
 }
 const PORT = Number(args.get('port') ?? 19131);
 const RIG = args.get('rig') ?? 'a0-connect';
-// Passed in rather than taken from the clock inside a rig, so a rig stays reproducible.
-const STAMP = new Date().toISOString().replace(/[:.]/g, '-');
 // The self-test writes somewhere else entirely. It used to share `dump/`, which meant that
 // clearing the test output and destroying a live recording were the same command - and that
 // is exactly how the first session's frames.jsonl was lost, by a `rm -rf dump` between two
 // self-test runs. A recording that took a person launching the game to produce does not
 // share a directory with something regenerated on every run.
-const DUMP = path.join(HERE, args.get('dump-root') ?? 'dump', STAMP);
-
-fs.mkdirSync(DUMP, { recursive: true });
-const frameLog = fs.createWriteStream(path.join(DUMP, 'frames.jsonl'), { flags: 'a' });
+const DUMP_ROOT = path.join(HERE, args.get('dump-root') ?? 'dump');
+// The self-test needs the process to end so it can read the files; a person at a keyboard
+// needs the opposite.
+const ONCE = args.get('once') === 'true';
 
 const startedAt = Date.now();
 const since = () => Date.now() - startedAt;
-
-function record(direction, frame, extra = {}) {
-  frameLog.write(JSON.stringify({ t: since(), direction, frame, ...extra }) + '\n');
-}
 
 function log(...parts) {
   console.log(`[${String(since()).padStart(6)}ms]`, ...parts);
@@ -55,8 +49,9 @@ function log(...parts) {
 // --- the session handed to a rig ---------------------------------------------------------
 
 class Session {
-  constructor(socket) {
+  constructor(socket, record) {
     this.socket = socket;
+    this.record = record;
     this.pending = new Map();
     this.events = [];
     this.unmatched = [];
@@ -66,7 +61,7 @@ class Session {
   }
 
   send(frame) {
-    record('out', frame);
+    this.record('out', frame);
     this.socket.send(JSON.stringify(frame));
   }
 
@@ -186,19 +181,36 @@ const wss = new WebSocketServer({ port: PORT });
 
 console.log('');
 console.log(`  listening on port ${PORT}`);
-console.log(`  dump: ${path.relative(process.cwd(), DUMP)}`);
-console.log(`  rig:  ${RIG}`);
+console.log(`  dumps: ${path.relative(process.cwd(), DUMP_ROOT)}`);
+console.log(`  rig:   ${RIG}`);
 console.log('');
 console.log('  In Minecraft Education, open the chat and type:');
 console.log('');
 console.log(`      /connect localhost:${PORT}`);
 console.log('');
-console.log('  Waiting for the game to connect. Ctrl-C to stop.');
+console.log(ONCE ? '  Waiting for one connection.' : '  Waiting. Reconnect as often as you like; Ctrl-C to stop.');
 console.log('');
 
+// Each connection is its own recording, and the server outlives all of them.
+//
+// It used to run the rig on the first connection and exit. That made one bad attempt - a
+// port scan, a stray client, a /connect from a world that turned out to be paused - cost the
+// whole session, with the person at the keyboard having to ask for the server to be started
+// again. Reconnecting is now free, and an attempt that fails leaves a dump saying how.
+let sessionCount = 0;
+
 wss.on('connection', async (socket) => {
-  log('connected');
-  const session = new Session(socket);
+  const n = ++sessionCount;
+  const stamp = new Date().toISOString().replace(/[:.]/g, '-');
+  const dump = path.join(DUMP_ROOT, `${stamp}-${String(n).padStart(2, '0')}`);
+  fs.mkdirSync(dump, { recursive: true });
+  const frameLog = fs.createWriteStream(path.join(dump, 'frames.jsonl'), { flags: 'a' });
+  const record = (direction, frame, extra = {}) => {
+    frameLog.write(JSON.stringify({ t: since(), direction, frame, ...extra }) + '\n');
+  };
+
+  log(`connection ${n} from ${socket._socket?.remoteAddress ?? 'unknown'} -> ${path.basename(dump)}`);
+  const session = new Session(socket, record);
 
   socket.on('message', (data) => {
     const text = data.toString();
@@ -214,19 +226,34 @@ wss.on('connection', async (socket) => {
     session.handle(frame);
   });
 
-  socket.on('close', () => log('disconnected'));
-  socket.on('error', (error) => log('socket error:', error.message));
+  socket.on('close', () => log(`connection ${n} closed`));
+  socket.on('error', (error) => log(`connection ${n} socket error:`, error.message));
+
+  // Which rig, and its current contents, are both decided at connection time.
+  //
+  // Restarting the probe to change rigs is what stranded the game once already: Minecraft
+  // stays attached to a socket that has gone away, and a later /connect is ignored with no
+  // message, so the fix is a `/connect out` that nobody knows to type. Now the file is
+  // re-read on every connection and the name comes from active-rig.txt if it exists, so a
+  // rig can be edited or swapped while the game stays connected to the same server.
+  const rigFile = path.join(HERE, 'active-rig.txt');
+  const rigName = fs.existsSync(rigFile) ? fs.readFileSync(rigFile, 'utf8').trim() : RIG;
 
   let rig;
   try {
-    rig = await import(`./rigs/${RIG}.mjs`);
+    // The query string defeats the module cache; without it the first version loaded would
+    // be the only version ever run.
+    rig = await import(`./rigs/${rigName}.mjs?t=${Date.now()}`);
   } catch (error) {
-    console.error(`\ncould not load rig \`${RIG}\`: ${error.message}\n`);
-    process.exit(2);
+    log(`could not load rig \`${rigName}\`: ${error.message}`);
+    session.note('rig_load_error', String(error.message));
+    fs.writeFileSync(path.join(dump, 'verdicts.json'), JSON.stringify(session.notes, null, 2) + '\n', 'utf8');
+    return;
   }
+  if (rigName !== RIG) log(`rig: ${rigName} (from active-rig.txt)`);
 
   try {
-    await rig.run(session, { log, dump: DUMP });
+    await rig.run(session, { log, dump });
   } catch (error) {
     log('rig threw:', error.stack ?? error.message);
     session.note('rig_error', String(error.message ?? error));
@@ -238,15 +265,11 @@ wss.on('connection', async (socket) => {
     session.notes.unknown_purposes = Object.fromEntries(session.unknownPurposes);
   }
 
+  fs.writeFileSync(path.join(dump, 'verdicts.json'), JSON.stringify(session.notes, null, 2) + '\n', 'utf8');
   fs.writeFileSync(
-    path.join(DUMP, 'verdicts.json'),
-    JSON.stringify(session.notes, null, 2) + '\n',
-    'utf8'
-  );
-  fs.writeFileSync(
-    path.join(DUMP, 'meta.json'),
+    path.join(dump, 'meta.json'),
     JSON.stringify(
-      { rig: RIG, port: PORT, startedAt: STAMP, platform: process.platform, node: process.version },
+      { rig: RIG, port: PORT, connection: n, startedAt: stamp, platform: process.platform, node: process.version },
       null,
       2
     ) + '\n',
@@ -254,9 +277,13 @@ wss.on('connection', async (socket) => {
   );
 
   log('');
-  log(`rig finished. ${Object.keys(session.notes).length} answers -> ${path.join(DUMP, 'verdicts.json')}`);
-  log('frames.jsonl holds everything, including what the rig did not read.');
-  frameLog.end(() => process.exit(0));
+  log(`connection ${n}: ${Object.keys(session.notes).length} answers -> ${path.join(dump, 'verdicts.json')}`);
+  if (ONCE) {
+    frameLog.end(() => process.exit(0));
+  } else {
+    frameLog.end();
+    log('still listening. /connect again to run the rig again.');
+  }
 });
 
 wss.on('error', (error) => {

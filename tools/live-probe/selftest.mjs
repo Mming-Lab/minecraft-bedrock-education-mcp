@@ -23,6 +23,11 @@ const PORT = 19141;
 const DUMP_ROOT = 'dump-selftest';
 const FAKE_FILL_LIMIT = 65536;
 
+// What the fake pretends not to have. `gettopsolidblock` is deliberately NOT here: it stands
+// for a command that is missing from /help but present in the build, which is the case the
+// last run could not rule out and the classifier now has to get right.
+const UNKNOWN_TO_FAKE = ['getchunkdata', 'getchunks', 'querytarget', 'agent', 'zzznotacommandatall', 'thiscommanddoesnotexist'];
+
 let passed = 0;
 let failed = 0;
 function check(name, fn) {
@@ -48,10 +53,17 @@ function fakeMinecraft(url, { silent = 'none' } = {}) {
   const socket = new WebSocket(url);
   const seen = [];
 
+  // Set once the fake sees the gamerule turned on, for the `feedback` mode below.
+  let feedbackOn = false;
+
   const isSilent = (line) => {
     if (silent === 'all') return true;
-    // A paused world answers `list` (the session knows the player list) but not `say`.
-    if (silent === 'world') return !line.startsWith('list');
+    // The observed live behaviour: /help is answered from the client's command table, and
+    // every other reply is command feedback - which `sendcommandfeedback false` suppresses.
+    // The command that turns it back on is itself silent, which is what makes this state so
+    // hard to read from the outside and why it needs its own test.
+    if (silent === 'feedback') return !feedbackOn && !line.startsWith('help');
+    if (silent === 'world') return !line.startsWith('help');
     // Cheats off: chat works, commands that change blocks do not.
     if (silent === 'privileged') return /^(setblock|fill|clone|structure|testforblock)/.test(line);
     return false;
@@ -65,10 +77,19 @@ function fakeMinecraft(url, { silent = 'none' } = {}) {
     if (messagePurpose === 'subscribe' || messagePurpose === 'unsubscribe') return;
 
     const line = frame.body?.commandLine ?? '';
+    if (/^gamerule sendcommandfeedback true/.test(line)) feedbackOn = true;
     if (isSilent(line)) return;
     let body;
 
-    if (line.startsWith('help ')) {
+    // These two come first on purpose. They match bare command words, and every handler
+    // below matches on a prefix - so ordered the other way round, `querytarget` with no
+    // arguments would be answered by the querytarget handler and never reach the "unknown
+    // command" branch it is here to exercise.
+    if (UNKNOWN_TO_FAKE.includes(line)) {
+      body = { statusCode: -2147483648, statusMessage: `不明なコマンド: ${line}。このコマンドが存在し、これを使用する権限があることを確認してください` };
+    } else if (line === 'testforblock') {
+      body = { statusCode: -2147483648, statusMessage: '構文エラー: 予期しない "": "testforblock >>"' };
+    } else if (line.startsWith('help ')) {
       const page = Number(line.split(' ')[1]);
       // Three pages then repeats, so the rig's paging loop has something to terminate on.
       body = { statusCode: 0, statusMessage: page <= 3 ? `page ${page}: /fill /setblock /testforblock` : 'page 3: /fill /setblock /testforblock' };
@@ -81,8 +102,8 @@ function fakeMinecraft(url, { silent = 'none' } = {}) {
         : { statusCode: -2147352576, statusMessage: 'The block at 13,64,-17 is diamond_block (expected: stone).' };
     } else if (line.startsWith('gettopsolidblock')) {
       body = { statusCode: 0, blockName: 'minecraft:grass_block', position: { x: 13, y: 63, z: -17 } };
-    } else if (line.startsWith('getchunkdata') || line.startsWith('getchunks') || line.startsWith('thiscommanddoesnotexist')) {
-      body = { statusCode: -2147483648, statusMessage: 'Syntax error: Unexpected "x": at "..."' };
+    } else if (UNKNOWN_TO_FAKE.some((c) => line.startsWith(c + ' '))) {
+      body = { statusCode: -2147483648, statusMessage: `不明なコマンド: ${line.split(' ')[0]}。このコマンドが存在し、これを使用する権限があることを確認してください` };
     } else if (line.startsWith('fill ')) {
       // A limit of 65536 rather than 32768, deliberately: it makes the rig's guess wrong, so
       // the binary search actually runs here instead of being skipped. The first version of
@@ -107,9 +128,11 @@ function fakeMinecraft(url, { silent = 'none' } = {}) {
 }
 
 async function runRig(rig, fakeOptions = {}) {
-  const probe = spawn(process.execPath, [path.join(HERE, 'probe.mjs'), '--port', String(PORT), '--rig', rig, '--dump-root', DUMP_ROOT], {
+  const probe = spawn(process.execPath, [path.join(HERE, 'probe.mjs'), '--port', String(PORT), '--rig', rig, '--dump-root', DUMP_ROOT, '--once', 'true'], {
     cwd: HERE,
     stdio: ['ignore', 'pipe', 'pipe'],
+    // The ladder rig waits for a person to move around in a world; nobody is here.
+    env: { ...process.env, PROBE_EVENT_WAIT: '300' },
   });
 
   let output = '';
@@ -175,7 +198,9 @@ check('a reply is matched to its request rather than to the next one in line', (
   assert.equal(a0.verdicts.round_trip_ok, true);
   assert.equal(a0.verdicts.reply_status_message, 'ok: say probe connected');
   assert.equal(a0.verdicts.refusal_status_code, -2147483648);
-  assert.match(a0.verdicts.refusal_status_message, /Syntax error/);
+  // The fake answers in Japanese, as the live client does. Asserting on an English string
+  // would pass here and tell us nothing about the session that matters.
+  assert.match(a0.verdicts.refusal_status_message, /不明なコマンド/);
 });
 
 check('the command that fails is recorded as a refusal, not as a timeout', () => {
@@ -249,18 +274,34 @@ check('a rig that throws still writes what it had', () => {
 // three different things a person should go and check. Each branch is tested, because a
 // diagnosis that names the wrong cause is worse than none.
 
-const paused = await runRig('a2-world', { silent: 'world' });
+const suppressed = await runRig('a2-world', { silent: 'feedback' });
 
-check('a world that does not tick is diagnosed as paused, not as broken', () => {
-  assert.equal(paused.verdicts.world_responds, false);
-  assert.match(paused.verdicts.diagnosis, /paused/);
-  assert.match(paused.verdicts.diagnosis, /`list` answers but `say` does not/);
+check('command feedback being off is detected and turned back on', () => {
+  // The live case, twice over: /help answers, nothing else does. The gate has to recognise
+  // that shape, send the gamerule without waiting for a reply it will not get, and carry on.
+  assert.equal(suppressed.verdicts.sendcommandfeedback_was_off, true);
+  assert.equal(suppressed.verdicts.world_responds, true, JSON.stringify(suppressed.verdicts.diagnosis));
+});
+
+check('once feedback is on the rest of the rig runs', () => {
+  assert.ok(suppressed.verdicts.corpus_total > 0, 'the rig stopped instead of continuing');
+});
+
+const stuck = await runRig('a2-world', { silent: 'world' });
+
+check('feedback that stays off after the gamerule is not called a paused world', () => {
+  // The earlier gate guessed "paused" here on a theory about `list` that turned out to be
+  // wrong. Now it says what it knows - the gamerule did not help - and names what a person
+  // can actually check in the game.
+  assert.equal(stuck.verdicts.world_responds, false);
+  assert.match(stuck.verdicts.diagnosis, /sendcommandfeedback/);
+  assert.match(stuck.verdicts.diagnosis, /operator|cheats/);
 });
 
 check('the gate stops instead of running the rest of the rig', () => {
   // The whole point: no corpus replay, no fill search, no four minutes of timeouts.
-  assert.equal(paused.verdicts.corpus_total, undefined);
-  assert.ok(paused.verdicts.fill_32768 === undefined);
+  assert.equal(stuck.verdicts.corpus_total, undefined);
+  assert.ok(stuck.verdicts.fill_32768 === undefined);
 });
 
 const noPermission = await runRig('a2-world', { silent: 'privileged' });
@@ -274,8 +315,11 @@ check('a live world that refuses block commands is diagnosed as permission', () 
 const deaf = await runRig('a2-world', { silent: 'all' });
 
 check('a socket that answers nothing is not blamed on the world', () => {
+  // /help is the control. If even that is silent, the fault is upstream of anything the
+  // world could be doing, and the diagnosis must not send someone to check gamerules.
   assert.equal(deaf.verdicts.world_responds, false);
-  assert.match(deaf.verdicts.diagnosis, /nothing answers at all/);
+  assert.match(deaf.verdicts.diagnosis, /`help` does not answer either/);
+  assert.doesNotMatch(deaf.verdicts.diagnosis, /sendcommandfeedback/);
 });
 
 const healthy = await runRig('a2-world');
@@ -285,6 +329,28 @@ check('a healthy world runs the whole rig', () => {
   assert.equal(healthy.verdicts.corpus_total, JSON.parse(
     fs.readFileSync(path.join(HERE, '..', '..', 'tests', 'golden', 'commands', 'corpus.json'), 'utf8')
   ).commands.length);
+});
+
+check('a command missing from /help but present in the build is not called absent', () => {
+  // The whole reason this probe was rewritten. The fake answers `gettopsolidblock` normally
+  // while refusing `getchunkdata` as unknown; the classifier has to split them, because
+  // "not in /help" covers absent, hidden, and unpermitted alike.
+  const existence = healthy.verdicts.command_existence;
+  assert.equal(healthy.verdicts.controls_differ, true, 'the controls fail identically, so nothing can be classified');
+  assert.match(existence.gettopsolidblock.verdict, /accepted|present/);
+  assert.match(existence.getchunkdata.verdict, /absent/);
+  assert.match(existence.querytarget.verdict, /absent/);
+});
+
+check('when the controls fail identically nothing is classified', () => {
+  // A guard on the guard. If the two controls ever produce the same message, a verdict of
+  // "absent" would be manufactured rather than measured.
+  const existence = healthy.verdicts.command_existence;
+  for (const [name, r] of Object.entries(existence)) {
+    if (r.verdict.startsWith('undecidable')) {
+      assert.equal(healthy.verdicts.controls_differ, false, `${name} was called undecidable while the controls did differ`);
+    }
+  }
 });
 
 check('absolute corpus coordinates are moved next to the player before being sent', () => {
@@ -300,6 +366,27 @@ check('relative and local corpus commands are sent unchanged', () => {
   const results = JSON.parse(fs.readFileSync(path.join(healthy.dir, 'corpus-results.json'), 'utf8'));
   assert.equal(results['setblock ^ ^ ^5 minecraft:stone replace'].sent, 'setblock ^ ^ ^5 minecraft:stone replace');
   assert.equal(results['setblock ~ ~ ~ minecraft:stone replace'].sent, 'setblock ~ ~ ~ minecraft:stone replace');
+});
+
+// --- the ladder -------------------------------------------------------------------------
+
+const ladder = await runRig('a3-ladder');
+
+check('the ladder records every rung, answered or not', () => {
+  assert.equal(ladder.exitCode, 0, ladder.output);
+  assert.equal(Object.keys(ladder.verdicts.ladder).length, 16);
+  assert.equal(ladder.verdicts.ladder_silent.length, 0, 'the fake answers everything');
+});
+
+check('the ladder tries more than one origin type', () => {
+  // Every public implementation sends origin.type "player". If this build wants something
+  // else, no amount of checking world settings would ever have found it.
+  assert.deepEqual(Object.keys(ladder.verdicts.origin_types), ['player', 'server', 'automationPlayer', 'commandBlock']);
+});
+
+check('the reading states what was measured and not a cause', () => {
+  assert.match(ladder.verdicts.reading, /Everything answered/);
+  assert.doesNotMatch(ladder.verdicts.reading, /sendcommandfeedback|paused/);
 });
 
 console.log(`\n${passed} passed, ${failed} failed`);

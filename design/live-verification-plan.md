@@ -109,6 +109,10 @@ J4: どちらもfail → 「フォーマット不明」で確定させ設計か�
 - **A-4 `gettopsolidblock` の solid 定義（V-09）9本**: water/leaves/torch/glass/carpet/snow/slab を pass|block で表に。**pass が1つでもあれば単独では地形高さを取り切れない**→ TheBeems の二分探索を補完に組み込む。`blockData` が実際に返るかも確認
 - **A-5 レイテンシと並列上限（V-10,11）211本**: 対象は `testforblock` 固定（`say` はチャット流量制限の影響を受ける）。直列20回→10並列×10→100並列×3→**101本**→150本→超過後に正常1本。`over_limit_behavior = error|silent-drop`（後者ならリトライ設計が必須）、`session_recovers`。**`design/observation-findings.md` の全秒数見積りを実測値で再計算すること**
 - **A-6 `fill` 自己置換（V-12,13）6本**: `fillCount` が64か0か。**直後に砂が残っているか（副作用検出）**。`BlockPlaced` が64件飛ぶなら自前ワールドモデルが汚染される→除外フィルタ必要。32768ちょうど/超過で上限メッセージを取得
+- **A-7 コマンド文字列コーパスの再生（V-14〜16）18本**: `tests/golden/commands/corpus.json` を1本ずつ送り、`statusCode` と `statusMessage` をそのまま記録する。**生成器のテストが緑でも、実機が受理するかは別問題**であり、それを埋めるのがこの治具。とくに決着が要るのは次の2点
+  - **キャレット `^` を `/setblock`・`/fill` が受けるか。** wiki の /fill ページは Bedrock の座標形式にキャレットを挙げているが、Coordinates ページは Java の節でしか説明していない。**食い違っているので実測以外に決め手がない。** 落ちるなら `local()` を座標型から外す（現状どのツールも `^` を出さないので実装はブロックされない）
+  - **`fill` の体積上限が本当に 32768 か。** wiki は Java についてのみ 32768 を明記し、Bedrock の数値を書いていない。`FILL_VOLUME_LIMIT` は唯一「出典なし」の定数。32768ちょうど／32769 の2本で確定させる（A-6 と同じ観測でよい）
+  - 受理された文字列は `frames.jsonl` に残るので、そのままCIのフィクスチャに昇格できる
 - **Rig B（V-17）**: `db/` を250ms間隔でポーリング→`setblock` 1本→**`t_flush` を実測**。`<2秒`ならリアルタイム観測可／30-300秒なら事後解析限定／**5分変化なしならワールド退出まで書かれない＝設計から外す**
 
 ## 記録フォーマット
@@ -128,6 +132,7 @@ testforblock_regex, testforblock_position_in_body, registry_name_matches_statusm
 localized_statusmessage, gettopsolidblock_blockdata_present, solid_definition{7項目},
 rtt_serial_p50, rtt_10par, rtt_100par, max_concurrent, over_limit_behavior, session_recovers,
 self_replace_counts, self_replace_side_effect, self_replace_fires_events, fill_volume_limit,
+caret_accepted_setblock, caret_accepted_fill, corpus_rejected[],
 tickingarea_area_limit, tickingarea_chunk_limit, extra_data_types,
 structure_save_ok, structure_volume_limit, save_hold_available,
 world_path_form, db_readable_while_running, t_flush_ms, t_readable_ms, structuretemplate_readable,

@@ -42,8 +42,14 @@ export const AxisSchema = z
  */
 export const BlockId = z
   .string()
+  // Padding is the caller's slip, not a different block. Trimmed here so that the schema and
+  // `normalizeBlockId`, which also trims, cannot disagree about ` stone`.
+  .trim()
   .regex(
-    /^(?:minecraft:)?[a-z0-9_]+$/,
+    // Any namespace, not just `minecraft:` - Education Edition loads add-ons, and an add-on
+    // block is `myaddon:reactor`. Case is accepted here and folded by `normalizeBlockId`;
+    // the two must agree on what they take, which `commands.test.mjs` checks.
+    /^(?:[A-Za-z0-9_]+:)?[A-Za-z0-9_]+$/,
     "must be a plain block id such as 'stone' or 'minecraft:oak_planks' — no spaces, states or quotes"
   )
   .describe("Block identifier. The 'minecraft:' prefix is optional.");

@@ -1,0 +1,22 @@
+{
+  "purpose": "Every command string the table produces. Unverified against a live server: replay these at a session to find out which the game actually accepts (design/live-verification-plan.md).",
+  "commands": [
+    "fill 0 0 0 1 1 1 minecraft:air replace minecraft:oak_log [\"pillar_axis\"=\"y\"]",
+    "fill 0 0 0 31 31 31 minecraft:stone replace",
+    "fill 0 0 0 4 4 4 minecraft:stone hollow",
+    "fill 0 0 0 4 4 4 minecraft:stone outline",
+    "fill 0 0 0 ~60 ~60 ~60 minecraft:stone replace",
+    "fill 0 64 0 4 64 4 minecraft:stone replace minecraft:dirt",
+    "setblock -5 -64 -12 minecraft:stone replace",
+    "setblock 0 0 0 minecraft:dirt replace",
+    "setblock 0 0 0 minecraft:stone destroy",
+    "setblock 0 0 0 minecraft:stone keep",
+    "setblock 0 0 0 minecraft:stone replace",
+    "setblock 0 0 0 myaddon:reactor replace",
+    "setblock 0 64 0 minecraft:stone replace",
+    "setblock 1 2 3 minecraft:oak_log [\"pillar_axis\"=\"x\"] keep",
+    "setblock ^ ^ ^5 minecraft:stone replace",
+    "setblock ~ ~ ~ minecraft:stone replace",
+    "setblock ~2 ~-3 ~ minecraft:stone replace"
+  ]
+}

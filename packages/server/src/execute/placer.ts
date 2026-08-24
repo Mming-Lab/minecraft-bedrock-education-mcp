@@ -115,7 +115,36 @@ export async function placeBlocks(
   positions: readonly Position[],
   block: BlockSpec | string
 ): Promise<PlacementReport> {
-  const { commands, blockCount } = commandsFor(positions, block);
+  return placeGroups(runner, [{ block, positions }]);
+}
+
+/** One block and the positions it goes in. A shape has one of these; a layer grid has many. */
+export interface BlockGroup {
+  readonly block: BlockSpec | string;
+  readonly positions: readonly Position[];
+}
+
+/**
+ * Places several blocks at once.
+ *
+ * The commands are collected across every group before any are sent, so the cap on commands
+ * in flight applies to the whole build rather than to each block in turn. A layer grid with
+ * twelve kinds of block would otherwise send twelve small batches one after another, and the
+ * round trips, not the commands, are what the time goes on.
+ */
+export async function placeGroups(
+  runner: CommandRunner,
+  groups: readonly BlockGroup[]
+): Promise<PlacementReport> {
+  const commands: string[] = [];
+  let blockCount = 0;
+  for (const group of groups) {
+    if (group.positions.length === 0) continue;
+    const packed = commandsFor(group.positions, group.block);
+    commands.push(...packed.commands);
+    blockCount += packed.blockCount;
+  }
+
   const results = await runAll(runner, commands);
 
   const unsent: { commandLine: string; reason: string }[] = [];

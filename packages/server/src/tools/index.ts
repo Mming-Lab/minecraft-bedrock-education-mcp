@@ -1,9 +1,11 @@
 export * from './types.js';
 export * from './build.js';
 export * from './world.js';
+export * from './layers.js';
 
 import { buildTools } from './build.js';
 import { offlineBridge, worldTools, type WorldBridge } from './world.js';
+import { layerTools } from './layers.js';
 import { BuildOutcome, type AnyToolDefinition, type PlannedBuild } from './types.js';
 import { placeBlocks } from '../execute/placer.js';
 import type { CommandRunner } from '../bridge/index.js';
@@ -64,7 +66,11 @@ export const offlineRunner: CommandRunner = {
  * never interleaved.
  */
 export function toolsFor(bridge: WorldBridge, runner: CommandRunner = offlineRunner): readonly AnyToolDefinition[] {
-  return [...buildTools.map((tool) => building(tool as AnyToolDefinition, runner)), ...worldTools(bridge)];
+  return [
+    ...buildTools.map((tool) => building(tool as AnyToolDefinition, runner)),
+    ...layerTools(runner),
+    ...worldTools(bridge),
+  ];
 }
 
 /**

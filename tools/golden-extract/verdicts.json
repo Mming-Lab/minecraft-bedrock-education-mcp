@@ -206,5 +206,45 @@
   "bezier/cubic": {
     "verdict": "spec-change",
     "rationale": "Same sampling change. 30 positions become 29, gap-free."
+  },
+  "helix/flat-r4-h2-t1": {
+    "verdict": "bug-fixed",
+    "requireInvariants": [
+      "I5"
+    ],
+    "rationale": "A wide turn over a short rise breaks into pieces: radius 4 over a rise of 2 gives 24 blocks in 2 pieces. The sample count comes from the total length of the helix, hypot(arc, rise), and is rounded rather than ceilinged - so 25 samples cover a length of 25.2 and each step moves 1.008 blocks. Since the coordinates are rounded per axis, a step just over one block can land two away: 0.4999 rounds to 0 while 1.5001 rounds to 2. Taking the ceiling keeps every step under a block. Found by a property test, not by a fixed case - the two helix cases already in the suite happen to be steep enough to stay in one piece, which is exactly why the fixed cases missed it.",
+    "reference": "src/utils/geometry/helix-calculator.ts"
+  },
+  "helix/flat-r8-h2-t1": {
+    "verdict": "bug-fixed",
+    "requireInvariants": [
+      "I5"
+    ],
+    "rationale": "A wide turn over a short rise breaks into pieces: radius 8 over a rise of 2 gives 43 blocks in 3 pieces. The sample count comes from the total length of the helix, hypot(arc, rise), and is rounded rather than ceilinged - so 25 samples cover a length of 25.2 and each step moves 1.008 blocks. Since the coordinates are rounded per axis, a step just over one block can land two away: 0.4999 rounds to 0 while 1.5001 rounds to 2. Taking the ceiling keeps every step under a block. Found by a property test, not by a fixed case - the two helix cases already in the suite happen to be steep enough to stay in one piece, which is exactly why the fixed cases missed it.",
+    "reference": "src/utils/geometry/helix-calculator.ts"
+  },
+  "helix/flat-r12-h3-t1": {
+    "verdict": "bug-fixed",
+    "requireInvariants": [
+      "I5"
+    ],
+    "rationale": "A wide turn over a short rise breaks into pieces: radius 12 over a rise of 3 gives 72 blocks in 2 pieces. The sample count comes from the total length of the helix, hypot(arc, rise), and is rounded rather than ceilinged - so 25 samples cover a length of 25.2 and each step moves 1.008 blocks. Since the coordinates are rounded per axis, a step just over one block can land two away: 0.4999 rounds to 0 while 1.5001 rounds to 2. Taking the ceiling keeps every step under a block. Found by a property test, not by a fixed case - the two helix cases already in the suite happen to be steep enough to stay in one piece, which is exactly why the fixed cases missed it.",
+    "reference": "src/utils/geometry/helix-calculator.ts"
+  },
+  "bezier/segments-1": {
+    "verdict": "bug-fixed",
+    "requireInvariants": [
+      "I5"
+    ],
+    "rationale": "One segment across a forty-block span returns the two endpoints and nothing between them, so the \"curve\" is in two pieces. The parameter invites the caller to undersample and then silently hands back something unbuildable. In the rewrite `segments` raises the sample count but cannot lower it below the density the curve needs, so the knob still does something useful and can no longer produce a broken result.",
+    "reference": "src/utils/geometry/bezier-calculator.ts"
+  },
+  "helix/h10-r3-t2": {
+    "verdict": "spec-change",
+    "rationale": "The sample count now takes the ceiling of the helix length rather than rounding it, so no step can exceed one block. These two cases were steep enough that the old rounding happened to stay in one piece, so the block count changes without the shape being wrong before - the same formula does break at flatter angles, which helix/flat-* records. 37 blocks become 35."
+  },
+  "helix/h20-r5-t4": {
+    "verdict": "spec-change",
+    "rationale": "The sample count now takes the ceiling of the helix length rather than rounding it, so no step can exceed one block. These two cases were steep enough that the old rounding happened to stay in one piece, so the block count changes without the shape being wrong before - the same formula does break at flatter angles, which helix/flat-* records. 121 blocks become 129."
   }
 }

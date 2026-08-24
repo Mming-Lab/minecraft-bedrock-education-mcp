@@ -9,6 +9,7 @@
     "nonIntegerCount": 0,
     "nonFiniteCount": 0,
     "outOfBoundsCount": 0,
+    "components": 1,
     "positions": []
   },
   "bugId": "B4",

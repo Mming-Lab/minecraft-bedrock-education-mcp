@@ -1,6 +1,6 @@
 {
   "case": "bezier/segments-1",
-  "verdict": "equivalent",
+  "verdict": "bug-fixed",
   "legacy": {
     "count": 2,
     "distinct": 2,
@@ -8,6 +8,7 @@
     "nonIntegerCount": 0,
     "nonFiniteCount": 0,
     "outOfBoundsCount": 0,
+    "components": 2,
     "bbox": {
       "min": [
         0,
@@ -37,5 +38,10 @@
         0
       ]
     ]
-  }
+  },
+  "rationale": "One segment across a forty-block span returns the two endpoints and nothing between them, so the \"curve\" is in two pieces. The parameter invites the caller to undersample and then silently hands back something unbuildable. In the rewrite `segments` raises the sample count but cannot lower it below the density the curve needs, so the knob still does something useful and can no longer produce a broken result.",
+  "reference": "src/utils/geometry/bezier-calculator.ts",
+  "requireInvariants": [
+    "I5"
+  ]
 }

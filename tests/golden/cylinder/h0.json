@@ -8,6 +8,7 @@
     "nonIntegerCount": 0,
     "nonFiniteCount": 0,
     "outOfBoundsCount": 0,
+    "components": 1,
     "positions": []
   },
   "rationale": "Height 0 has no layers; reject rather than return empty.",

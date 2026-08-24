@@ -440,10 +440,15 @@ export function helix(
   }
   const map = axisMapper(axis, c);
 
-  // Sample densely enough that consecutive blocks touch: the arc length of the winding plus
-  // the rise, at roughly one sample per block.
+  // The curve travels hypot(arc, rise) blocks over the whole of t, so that many samples keep
+  // each step to at most one block and consecutive blocks touch.
+  //
+  // Rounded rather than ceilinged, this is off by a fraction and that fraction is enough:
+  // 25 samples over a length of 25.2 steps 1.008 blocks at a time, and since each axis is
+  // rounded on its own, a step just over one block can land two blocks away - 0.4999 rounds
+  // to 0 while 1.5001 rounds to 2. A radius-4 single-turn helix came out in two pieces.
   const arc = 2 * Math.PI * r * Math.abs(turns);
-  const steps = Math.max(1, Math.round(Math.hypot(arc, h)));
+  const steps = Math.max(1, Math.ceil(Math.hypot(arc, h)));
   const direction = clockwise ? 1 : -1;
 
   const out = new PositionCollector();
@@ -470,16 +475,27 @@ export function bezier(
   const points = [toBlockPosition(start), ...controlPoints.map(toBlockPosition), toBlockPosition(end)];
   const degree = points.length - 1;
 
-  // Default to roughly one sample per block of the control polygon's length.
-  let polygonLength = 0;
+  // A Bézier is not traversed at a constant rate: with two control points in the same place
+  // the curve crawls at one end and races at the other. Sampling once per block of the
+  // control polygon's *length* therefore leaves gaps wherever the curve is moving fastest -
+  // which it does, at up to `degree * longestSegment` blocks per unit of t.
+  //
+  // That bound is exactly what makes the step count safe: |B'(t)| <= n * max|P(i+1) - P(i)|,
+  // so taking that many samples keeps every step to at most one block. Repeats are dropped
+  // by the collector, so oversampling the slow stretches costs nothing but time.
+  let longestSegment = 0;
   for (let i = 1; i < points.length; i++) {
     const a = points[i - 1]!;
     const b = points[i]!;
-    polygonLength += Math.hypot(b.x - a.x, b.y - a.y, b.z - a.z);
+    longestSegment = Math.max(longestSegment, Math.hypot(b.x - a.x, b.y - a.y, b.z - a.z));
   }
+  // `segments` raises the sample count; it cannot lower it below the bound. Asking for one
+  // segment across a forty-block span used to return the two endpoints and nothing between
+  // them — a "curve" in two pieces, from a knob the caller was invited to turn.
+  const required = Math.max(1, Math.ceil(degree * longestSegment));
   const steps = segments === undefined
-    ? Math.max(1, Math.round(polygonLength))
-    : requireCount('segments', segments);
+    ? required
+    : Math.max(required, requireCount('segments', segments));
 
   const weights: number[] = [];
   for (let i = 0; i <= degree; i++) weights.push(binomial(degree, i));

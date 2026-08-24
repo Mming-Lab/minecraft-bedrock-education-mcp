@@ -1,0 +1,157 @@
+{
+  "case": "helix/flat-r4-h2-t1",
+  "verdict": "bug-fixed",
+  "legacy": {
+    "count": 24,
+    "distinct": 24,
+    "dupCount": 0,
+    "nonIntegerCount": 0,
+    "nonFiniteCount": 0,
+    "outOfBoundsCount": 0,
+    "components": 2,
+    "bbox": {
+      "min": [
+        -4,
+        0,
+        -4
+      ],
+      "max": [
+        4,
+        2,
+        4
+      ]
+    },
+    "centroid": [
+      0.416667,
+      1,
+      0
+    ],
+    "positions": [
+      [
+        -4,
+        1,
+        -1
+      ],
+      [
+        -4,
+        1,
+        1
+      ],
+      [
+        -3,
+        1,
+        -3
+      ],
+      [
+        -3,
+        1,
+        -2
+      ],
+      [
+        -3,
+        1,
+        2
+      ],
+      [
+        -3,
+        1,
+        3
+      ],
+      [
+        -2,
+        1,
+        -4
+      ],
+      [
+        -2,
+        1,
+        4
+      ],
+      [
+        -1,
+        1,
+        -4
+      ],
+      [
+        -1,
+        1,
+        4
+      ],
+      [
+        0,
+        0,
+        4
+      ],
+      [
+        0,
+        2,
+        -4
+      ],
+      [
+        1,
+        0,
+        4
+      ],
+      [
+        1,
+        2,
+        -4
+      ],
+      [
+        2,
+        0,
+        3
+      ],
+      [
+        2,
+        2,
+        -3
+      ],
+      [
+        3,
+        0,
+        3
+      ],
+      [
+        3,
+        2,
+        -3
+      ],
+      [
+        4,
+        0,
+        0
+      ],
+      [
+        4,
+        0,
+        1
+      ],
+      [
+        4,
+        0,
+        2
+      ],
+      [
+        4,
+        2,
+        -2
+      ],
+      [
+        4,
+        2,
+        -1
+      ],
+      [
+        4,
+        2,
+        0
+      ]
+    ]
+  },
+  "rationale": "A wide turn over a short rise breaks into pieces: radius 4 over a rise of 2 gives 24 blocks in 2 pieces. The sample count comes from the total length of the helix, hypot(arc, rise), and is rounded rather than ceilinged - so 25 samples cover a length of 25.2 and each step moves 1.008 blocks. Since the coordinates are rounded per axis, a step just over one block can land two away: 0.4999 rounds to 0 while 1.5001 rounds to 2. Taking the ceiling keeps every step under a block. Found by a property test, not by a fixed case - the two helix cases already in the suite happen to be steep enough to stay in one piece, which is exactly why the fixed cases missed it.",
+  "reference": "src/utils/geometry/helix-calculator.ts",
+  "requireInvariants": [
+    "I5"
+  ]
+}

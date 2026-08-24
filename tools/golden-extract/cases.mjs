@@ -58,6 +58,11 @@ export function buildCases(g, mathLib) {
   add('helix', 'r0', () => g.calculateHelixPositions(C, 10, 0, 3), { note: 'B8: radius 0' });
   add('helix', 't0', () => g.calculateHelixPositions(C, 10, 3, 0), { note: 'B8: zero turns' });
   add('helix', 'h0', () => g.calculateHelixPositions(C, 0, 3, 3), { expectEmpty: true });
+  // A wide turn over a short rise: the sample count comes from the total length, so the
+  // horizontal step exceeds one block and the winding breaks into pieces.
+  add('helix', 'flat-r4-h2-t1', () => g.calculateHelixPositions(C, 2, 4, 1));
+  add('helix', 'flat-r8-h2-t1', () => g.calculateHelixPositions(C, 2, 8, 1));
+  add('helix', 'flat-r12-h3-t1', () => g.calculateHelixPositions(C, 3, 12, 1));
 
   // torus
   for (const [R, r] of [[8, 3], [5, 2], [3, 1]]) {

@@ -68,7 +68,10 @@ function normalise(positions) {
     ) outOfBoundsCount++;
   }
 
-  return { tuples, dupCount, nonIntegerCount, nonFiniteCount, outOfBoundsCount, distinct: seen.size };
+  // Only meaningful when every coordinate is finite; a NaN cannot be a grid neighbour.
+  const components = nonFiniteCount === 0 && tuples.length > 0 ? componentCount(tuples) : 1;
+
+  return { tuples, dupCount, nonIntegerCount, nonFiniteCount, outOfBoundsCount, components, distinct: seen.size };
 }
 
 function diagnostics(tuples) {
@@ -99,12 +102,43 @@ function hash(tuples) {
 // --- invariants -----------------------------------------------------------------------
 // A case that violates none of these is safe to promote to `equivalent` without a human
 // reading it. A case that violates one is queued for review.
+/**
+ * How many separate pieces the blocks fall into, treating diagonal contact as touching.
+ *
+ * A shape in more than one piece is not buildable as one thing. This was added after a
+ * property test found that a flat helix - a wide radius over a short rise - came out in two
+ * or three pieces, at parameters no fixed case happened to cover.
+ */
+function componentCount(tuples) {
+  const remaining = new Set(tuples.map(([x, y, z]) => `${x},${y},${z}`));
+  let count = 0;
+
+  while (remaining.size) {
+    count++;
+    const first = remaining.values().next().value;
+    remaining.delete(first);
+    const queue = [first.split(',').map(Number)];
+
+    while (queue.length) {
+      const [x, y, z] = queue.pop();
+      for (let dx = -1; dx <= 1; dx++)
+        for (let dy = -1; dy <= 1; dy++)
+          for (let dz = -1; dz <= 1; dz++) {
+            const k = `${x + dx},${y + dy},${z + dz}`;
+            if (remaining.delete(k)) queue.push(k.split(',').map(Number));
+          }
+    }
+  }
+  return count;
+}
+
 function invariantViolations(n) {
   const out = [];
   if (n.nonFiniteCount) out.push(`I9:non-finite(${n.nonFiniteCount})`);
   if (n.nonIntegerCount) out.push(`I1:non-integer(${n.nonIntegerCount})`);
   if (n.dupCount) out.push(`I2:duplicates(${n.dupCount})`);
   if (n.outOfBoundsCount) out.push(`I4:out-of-bounds(${n.outOfBoundsCount})`);
+  if (n.components > 1) out.push(`I5:disconnected(${n.components})`);
   return out;
 }
 
@@ -169,6 +203,7 @@ for (const c of cases) {
         nonIntegerCount: n.nonIntegerCount,
         nonFiniteCount: n.nonFiniteCount,
         outOfBoundsCount: n.outOfBoundsCount,
+        components: n.components,
         ...diagnostics(n.tuples),
       },
     };

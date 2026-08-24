@@ -77,10 +77,40 @@ function normalise(positions) {
 
 const hash = (tuples) => createHash('sha256').update(JSON.stringify(tuples)).digest('hex');
 
+/** Separate pieces the blocks fall into, treating diagonal contact as touching. */
+function componentCount(tuples) {
+  const remaining = new Set(tuples.map(([x, y, z]) => `${x},${y},${z}`));
+  let count = 0;
+
+  while (remaining.size) {
+    count++;
+    const first = remaining.values().next().value;
+    remaining.delete(first);
+    const queue = [first.split(',').map(Number)];
+
+    while (queue.length) {
+      const [x, y, z] = queue.pop();
+      for (let dx = -1; dx <= 1; dx++)
+        for (let dy = -1; dy <= 1; dy++)
+          for (let dz = -1; dz <= 1; dz++) {
+            const k = `${x + dx},${y + dy},${z + dz}`;
+            if (remaining.delete(k)) queue.push(k.split(',').map(Number));
+          }
+    }
+  }
+  return count;
+}
+
 const INVARIANTS = {
   I1: (n) => (n.nonIntegerCount ? `${n.nonIntegerCount} non-integer coordinates` : null),
   I2: (n) => (n.dupCount ? `${n.dupCount} duplicated coordinates` : null),
   I4: (n) => (n.outOfBoundsCount ? `${n.outOfBoundsCount} coordinates outside world bounds` : null),
+  // A shape in more than one piece is not buildable as one thing.
+  I5: (n) => {
+    if (n.nonFiniteCount || n.tuples.length === 0) return null;
+    const pieces = componentCount(n.tuples);
+    return pieces > 1 ? `the blocks fall into ${pieces} separate pieces` : null;
+  },
   I9: (n) => (n.nonFiniteCount ? `${n.nonFiniteCount} non-finite coordinates` : null),
 };
 

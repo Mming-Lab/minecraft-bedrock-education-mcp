@@ -9,6 +9,7 @@
     "nonIntegerCount": 0,
     "nonFiniteCount": 0,
     "outOfBoundsCount": 0,
+    "components": 4,
     "bbox": {
       "min": [
         0,

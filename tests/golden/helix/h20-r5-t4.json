@@ -1,6 +1,6 @@
 {
   "case": "helix/h20-r5-t4",
-  "verdict": "equivalent",
+  "verdict": "spec-change",
   "legacy": {
     "count": 121,
     "distinct": 121,
@@ -8,6 +8,7 @@
     "nonIntegerCount": 0,
     "nonFiniteCount": 0,
     "outOfBoundsCount": 0,
+    "components": 1,
     "bbox": {
       "min": [
         -5,
@@ -632,5 +633,6 @@
         0
       ]
     ]
-  }
+  },
+  "rationale": "The sample count now takes the ceiling of the helix length rather than rounding it, so no step can exceed one block. These two cases were steep enough that the old rounding happened to stay in one piece, so the block count changes without the shape being wrong before - the same formula does break at flatter angles, which helix/flat-* records. 121 blocks become 129."
 }

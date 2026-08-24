@@ -103,3 +103,59 @@ export function buildCases(g, mathLib) {
 
   return cases;
 }
+
+/**
+ * Inputs for the block packer.
+ *
+ * Deliberately built from plain loops rather than from either geometry module. The point of
+ * these cases is to compare two packers on the same blocks; if the input came from the
+ * geometry, the two runs would be packing different sets wherever the shapes disagree, and
+ * the comparison would mean nothing.
+ *
+ * The first six are the original set - all dense, all of which the legacy packer handles
+ * exactly. The rest have a hole in their projection onto an axis, which is the case it gets
+ * wrong: it expands over the sorted list of distinct coordinates and reads adjacency in that
+ * list as adjacency in the world, so it bridges the gap and fills blocks nobody asked for.
+ */
+export function buildOptimizerCases() {
+  const P = (x, y, z) => ({ x, y, z });
+  const cases = [];
+  const add = (id, positions, note) => cases.push({ id, positions, note });
+
+  const box = (x0, y0, z0, x1, y1, z1) => {
+    const out = [];
+    for (let x = x0; x <= x1; x++)
+      for (let y = y0; y <= y1; y++) for (let z = z0; z <= z1; z++) out.push(P(x, y, z));
+    return out;
+  };
+  const ball = (r, hollow) => {
+    const out = [];
+    const inner = hollow ? (r - 1) * (r - 1) : -1;
+    for (let x = -r; x <= r; x++)
+      for (let y = -r; y <= r; y++)
+        for (let z = -r; z <= r; z++) {
+          const d = x * x + y * y + z * z;
+          if (d <= r * r && d > inner) out.push(P(x, y, z));
+        }
+    return out;
+  };
+
+  add('solid-cube-4x4x4', box(0, 0, 0, 3, 3, 3));
+  add('sphere-r5', ball(5, false));
+  add('hollow-sphere-r5', ball(5, true));
+  add('line', Array.from({ length: 11 }, (_, i) => P(i, Math.round(i / 2), Math.round(i * 0.3))));
+  add('single', [P(0, 0, 0)]);
+  add('empty', []);
+
+  add('two-blocks-five-apart', [P(0, 0, 0), P(5, 0, 0)], 'the smallest input the legacy packer over-fills');
+  add('two-clusters', [...box(0, 0, 0, 1, 1, 1), ...box(10, 0, 0, 11, 1, 1)], 'what a two-region edit looks like');
+  add('gap-on-y', [P(0, 0, 0), P(0, 4, 0)]);
+  add('gap-on-z', [P(0, 0, 0), P(0, 0, 7)]);
+  add('hollow-shell-with-interior-gap', box(0, 0, 0, 4, 4, 4).filter(
+    (p) => p.x === 0 || p.x === 4 || p.y === 0 || p.y === 4 || p.z === 0 || p.z === 4
+  ));
+  add('checkerboard-8', box(0, 0, 0, 7, 7, 0).filter((p) => (p.x + p.y) % 2 === 0), 'worst case for packing: every block its own box');
+  add('duplicated-input', [P(1, 1, 1), P(1, 1, 1), P(1, 1, 1)], 'a fill places once, so duplicates must collapse');
+
+  return cases;
+}

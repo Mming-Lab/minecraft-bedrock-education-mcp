@@ -39,7 +39,14 @@ The union of the emitted boxes must equal the input set exactly.
 |---|---|---|---|---|---|---|---|---|
 | solid-cube-4x4x4 | 64 | 64 | 1 | 64 | 0 | 0 | 0 | yes |
 | sphere-r5 | 515 | 515 | 43 | 515 | 0 | 0 | 0 | yes |
-| hollow-sphere-r5 | 264 | 264 | 83 | 264 | 0 | 0 | 0 | yes |
+| hollow-sphere-r5 | 258 | 258 | 88 | 258 | 0 | 0 | 0 | yes |
 | line | 11 | 11 | 7 | 11 | 0 | 0 | 0 | yes |
 | single | 1 | 1 | 1 | 1 | 0 | 0 | 0 | yes |
 | empty | 0 | 0 | 0 | 0 | 0 | 0 | 0 | yes |
+| two-blocks-five-apart | 2 | 2 | 1 | 6 | 0 | 4 | 0 | **NO** |
+| two-clusters | 16 | 16 | 1 | 48 | 0 | 32 | 0 | **NO** |
+| gap-on-y | 2 | 2 | 1 | 5 | 0 | 3 | 0 | **NO** |
+| gap-on-z | 2 | 2 | 1 | 8 | 0 | 6 | 0 | **NO** |
+| hollow-shell-with-interior-gap | 98 | 98 | 6 | 98 | 0 | 0 | 0 | yes |
+| checkerboard-8 | 32 | 32 | 32 | 32 | 0 | 0 | 0 | yes |
+| duplicated-input | 3 | 1 | 1 | 1 | 0 | 0 | 0 | yes |

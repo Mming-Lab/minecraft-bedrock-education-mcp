@@ -73,6 +73,16 @@ const MUST_DIVERGE = Object.entries(VERDICTS)
   .filter(([key, value]) => key !== '$comment' && (value.verdict === 'bug-fixed' || value.verdict === 'undefined-behavior'))
   .map(([key]) => key);
 
+// The packer's expected failures are not written down anywhere by hand - they are read off
+// the measurement. A case whose recorded run covered blocks that were not in the input is a
+// case the legacy packer must fail, and no edit to verdicts.json can quietly excuse it.
+const coverageFile = path.join(GOLDEN, 'block-optimizer', 'coverage.json');
+if (fs.existsSync(coverageFile)) {
+  for (const c of JSON.parse(fs.readFileSync(coverageFile, 'utf8'))) {
+    if (!c.exact) MUST_DIVERGE.push(`block-optimizer/${c.id}`);
+  }
+}
+
 const run = spawnSync(
   process.execPath,
   [

@@ -143,7 +143,7 @@ function invariantViolations(n) {
 }
 
 // --- case matrix (shared with validate.mjs) ------------------------------------------
-import { buildCases } from './cases.mjs';
+import { buildCases, buildOptimizerCases } from './cases.mjs';
 
 const cases = buildCases(geometry, mathLib);
 
@@ -243,7 +243,7 @@ for (const c of cases) {
 
 // --- block-optimizer: the union of the emitted boxes must equal the input set ----------
 const optimizerCases = [];
-function optimizerCase(id, positions) {
+function optimizerCase(id, positions, note) {
   const result = optimizer.optimizeBlocks(positions);
   const inputKeys = new Set(positions.map((p) => `${p.x},${p.y},${p.z}`));
   const covered = new Set();
@@ -261,6 +261,7 @@ function optimizerCase(id, positions) {
   const extra = [...covered].filter((k) => !inputKeys.has(k)).length;
   optimizerCases.push({
     id,
+    note,
     inputCount: positions.length,
     distinctInput: inputKeys.size,
     boxes: (result.rectangles ?? []).length,
@@ -272,12 +273,9 @@ function optimizerCase(id, positions) {
   });
 }
 
-optimizerCase('solid-cube-4x4x4', g.calculateCubePositions(P(0, 0, 0), P(3, 3, 3)));
-optimizerCase('sphere-r5', g.calculateSpherePositions(C, 5));
-optimizerCase('hollow-sphere-r5', g.calculateSpherePositions(C, 5, true));
-optimizerCase('line', g.calculateLinePositions(P(0, 0, 0), P(10, 5, 3)));
-optimizerCase('single', [P(0, 0, 0)]);
-optimizerCase('empty', []);
+// The inputs come from cases.mjs, built by plain loops rather than by either geometry
+// module, so that this run and the validating one pack identical blocks.
+for (const c of buildOptimizerCases()) optimizerCase(c.id, c.positions, c.note);
 
 fs.mkdirSync(path.join(OUT, 'block-optimizer'), { recursive: true });
 fs.writeFileSync(

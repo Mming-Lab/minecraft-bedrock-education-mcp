@@ -19,7 +19,7 @@ import { createHash } from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { buildCases } from './cases.mjs';
+import { buildCases, buildOptimizerCases } from './cases.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const GOLDEN = path.join(HERE, '..', '..', 'tests', 'golden');
@@ -225,14 +225,79 @@ for (const c of cases) {
 }
 
 // --- block-optimizer -----------------------------------------------------------------
+//
+// The invariant, not the box count, is what must hold: the union of the emitted boxes has
+// to equal the input set, on every case. A packing that uses fewer boxes than the recorded
+// one is an improvement and passes; one that covers a block the caller did not ask for
+// fails, whatever the legacy packer did on the same input.
+//
+// Four of the recorded cases have `exact: false` - the legacy packer bridges a gap in the
+// projection and over-fills. Those are the ones this check exists for.
 if (optimizer) {
   const coverageFile = path.join(GOLDEN, 'block-optimizer', 'coverage.json');
-  if (fs.existsSync(coverageFile)) {
-    for (const expected of JSON.parse(fs.readFileSync(coverageFile, 'utf8'))) {
-      // The invariant, not the box count, is what must hold: the union of the emitted
-      // boxes has to equal the input set. A better packing is allowed to use fewer boxes.
-      if (!expected.exact) continue;
+  const recorded = fs.existsSync(coverageFile)
+    ? new Map(JSON.parse(fs.readFileSync(coverageFile, 'utf8')).map((c) => [c.id, c]))
+    : new Map();
+
+  // Takes either shape, so the same check can be pointed at the legacy packer. That is what
+  // makes the self-test meaningful: the legacy one has to actually fail this, and it does,
+  // rather than erroring out because the export is named something else.
+  const pack = optimizer.optimizeToBoxes
+    ? (positions) => optimizer.optimizeToBoxes(positions).boxes
+    : (positions) => optimizer.optimizeBlocks(positions).rectangles ?? [];
+
+  for (const c of buildOptimizerCases()) {
+    const id = `block-optimizer/${c.id}`;
+    let result;
+    try {
+      result = { boxes: pack(c.positions) };
+    } catch (error) {
+      results.fail++;
+      failures.push({ id, why: `threw: ${error && error.message ? error.message : error}` });
+      continue;
+    }
+
+    const input = new Set(c.positions.map((p) => `${p.x},${p.y},${p.z}`));
+    const covered = new Set();
+    let overlaps = 0;
+    let oversized = 0;
+    for (const b of result.boxes) {
+      const volume = (b.to.x - b.from.x + 1) * (b.to.y - b.from.y + 1) * (b.to.z - b.from.z + 1);
+      if (volume > 32768) oversized++;
+      for (let x = b.from.x; x <= b.to.x; x++)
+        for (let y = b.from.y; y <= b.to.y; y++)
+          for (let z = b.from.z; z <= b.to.z; z++) {
+            const k = `${x},${y},${z}`;
+            if (covered.has(k)) overlaps++;
+            covered.add(k);
+          }
+    }
+
+    const missing = [...input].filter((k) => !covered.has(k));
+    const extra = [...covered].filter((k) => !input.has(k));
+    const problems = [];
+    if (missing.length) problems.push(`${missing.length} blocks not covered (e.g. ${missing[0]})`);
+    if (extra.length) problems.push(`${extra.length} blocks covered that were not asked for (e.g. ${extra[0]})`);
+    if (overlaps) problems.push(`${overlaps} blocks covered twice`);
+    if (oversized) problems.push(`${oversized} boxes exceed what one /fill can place`);
+
+    if (problems.length) {
+      results.fail++;
+      failures.push({ id, why: problems.join('; ') });
+      continue;
+    }
+
+    results.pass++;
+    const was = recorded.get(c.id);
+    if (was && was.exact && result.boxes.length > was.boxes) {
+      // Correct but worse packing. Not a failure - more commands, not wrong ones - but the
+      // kind of drift that is invisible unless something says it out loud.
       results.info++;
+      failures.push({
+        id,
+        why: `packs into ${result.boxes.length} boxes where the legacy packer used ${was.boxes}`,
+        informational: true,
+      });
     }
   }
 }

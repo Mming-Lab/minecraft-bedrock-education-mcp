@@ -53,6 +53,15 @@ jobs:
             exit 1
           fi
 
+      # The packing contract - every block asked for, no block that was not. Checked against
+      # random sets as well as shapes, because the legacy packer passed 78 measured cases and
+      # broke on the first input whose projection had a hole in it.
+      - name: Block packing
+        working-directory: packages/server
+        run: node test/optimize.test.mjs
+        env:
+          PROPERTY_RUNS: 500
+
       # Searches the parameter space for inputs that break an invariant, rather than checking
       # the handful a fixed case happens to cover. It found a helix that came out in two
       # pieces at a radius no golden case used.

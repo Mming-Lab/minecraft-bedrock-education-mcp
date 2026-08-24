@@ -1,3 +1,4 @@
 node_modules/
 built/
 ext-src/
+tsconfig.ext.json

@@ -118,7 +118,14 @@ const C = P(0, 0, 0);
 const g = geometry;
 
 // --- run ------------------------------------------------------------------------------
-fs.rmSync(OUT, { recursive: true, force: true });
+// Clear only the directories this script owns. `tests/golden` also holds output from
+// geometry-compare and dump-schemas, and wiping the tree wholesale silently destroyed
+// theirs.
+for (const owned of new Set(cases.map((c) => c.fn))) {
+  fs.rmSync(path.join(OUT, owned), { recursive: true, force: true });
+}
+fs.rmSync(path.join(OUT, 'block-optimizer'), { recursive: true, force: true });
+fs.rmSync(path.join(OUT, 'REPORT.md'), { force: true });
 
 const summary = { equivalent: 0, unreviewed: 0, 'undefined-behavior': 0, error: 0 };
 const review = [];

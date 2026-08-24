@@ -27,12 +27,32 @@ import { world, system } from '@minecraft/server';
 const TAG = 'MCPB';
 const VERSION = '0.1.0';
 
-/** The only output path that reaches the socket. */
+/**
+ * The output path.
+ *
+ * `tell @s` rather than `say`, because `say` broadcasts: a 4096-block read puts 172 lines in
+ * front of everyone in the world, which in a classroom is the whole chat gone. A private
+ * message is never sent to the rest of the class at all.
+ *
+ * Both were measured side by side. Both reach the socket; the ceilings are 481 characters for
+ * `say` and 484 for `tell`, so nothing is given up by choosing the quiet one.
+ *
+ * Hiding the chat instead was the other candidate, and it is not available. `/hud` takes
+ * hotbar, crosshair, paperdoll, armor, health, progress_bar, hunger, air_bubbles,
+ * horse_health, status_effects, item_text and all - enumerated by asking the game rather than
+ * by guessing - and `chat` is not among them. So the lines still land in the operator's own
+ * chat, which is acceptable: they are the one driving this.
+ *
+ * `world.sendMessage` is not an option however tempting it looks. It prints in the game and
+ * fires nothing, because PlayerMessage is a *player* event. That cost three sessions.
+ */
+const CHANNEL = 'tell';
+
 function send(text) {
   const player = world.getPlayers()[0];
   if (!player) return false;
   try {
-    player.runCommand('say ' + text);
+    player.runCommand(CHANNEL === 'tell' ? 'tell @s ' + text : 'say ' + text);
     return true;
   } catch {
     return false;
@@ -48,6 +68,65 @@ function fail(id, error) {
 }
 
 const handlers = {
+  /**
+   * Which return channel to use, and whether the chat can be hidden while it is used.
+   *
+   * The bridge answers through chat because that is the only path that reaches the socket,
+   * and that means a 4096-block read puts 172 lines in front of everyone in the world. In a
+   * classroom that is the whole chat gone. Two things might fix it, and the add-on can do
+   * both itself:
+   *
+   *   tell @s   should be visible only to the one player rather than broadcast
+   *   hud       should hide the chat element entirely, leaving the transport alone
+   *
+   * Neither has been measured. `tell` might not fire PlayerMessage at all - `say` does and
+   * `world.sendMessage` does not, so the difference is not obvious from the outside - and its
+   * line limit might differ from say's 481. So this sends the same payload both ways, tagged,
+   * and lets the far end report which arrived.
+   */
+  channel(id, args) {
+    const player = world.getPlayers()[0];
+    if (!player) {
+      reply(id, { ok: false, error: 'no player' });
+      return;
+    }
+    const chars = Math.min(args.chars || 200, 1200);
+    const filler = 'y'.repeat(chars);
+    const results = {};
+
+    // Hiding first, so a channel that only works while the chat is visible shows up as such.
+    if (args.hide) {
+      try {
+        player.runCommand('hud @s hide chat');
+        results.hud_hide = 'accepted';
+      } catch (error) {
+        results.hud_hide = String((error && error.message) || error);
+      }
+    }
+
+    for (const verb of ['say', 'tell']) {
+      try {
+        const text = TAG + '|' + id + '.' + verb + '|' + filler;
+        player.runCommand(verb === 'tell' ? 'tell @s ' + text : 'say ' + text);
+        results[verb] = 'sent';
+      } catch (error) {
+        results[verb] = String((error && error.message) || error);
+      }
+    }
+
+    if (args.hide) {
+      try {
+        player.runCommand('hud @s reset');
+        results.hud_reset = 'accepted';
+      } catch (error) {
+        results.hud_reset = String((error && error.message) || error);
+      }
+    }
+
+    // Through `say`, which is known to arrive, so the summary itself is never the casualty.
+    reply(id, { ok: true, chars, results });
+  },
+
   /** Proves the pack is live and reports what the runtime will admit to. */
   ping(id) {
     reply(id, { ok: true, version: VERSION, tick: system.currentTick, players: world.getPlayers().length });

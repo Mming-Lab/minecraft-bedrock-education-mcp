@@ -31,7 +31,12 @@ const PORT = Number(args.get('port') ?? 19131);
 const RIG = args.get('rig') ?? 'a0-connect';
 // Passed in rather than taken from the clock inside a rig, so a rig stays reproducible.
 const STAMP = new Date().toISOString().replace(/[:.]/g, '-');
-const DUMP = path.join(HERE, 'dump', STAMP);
+// The self-test writes somewhere else entirely. It used to share `dump/`, which meant that
+// clearing the test output and destroying a live recording were the same command - and that
+// is exactly how the first session's frames.jsonl was lost, by a `rm -rf dump` between two
+// self-test runs. A recording that took a person launching the game to produce does not
+// share a directory with something regenerated on every run.
+const DUMP = path.join(HERE, args.get('dump-root') ?? 'dump', STAMP);
 
 fs.mkdirSync(DUMP, { recursive: true });
 const frameLog = fs.createWriteStream(path.join(DUMP, 'frames.jsonl'), { flags: 'a' });

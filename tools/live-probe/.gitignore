@@ -2,3 +2,4 @@ node_modules/
 # The raw recordings. Kept out of the tree by default because a session dump is large and
 # machine-specific; promote the frames you want as CI fixtures explicitly.
 dump/
+dump-selftest/

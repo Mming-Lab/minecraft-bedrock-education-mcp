@@ -20,6 +20,7 @@ import WebSocket from 'ws';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const PORT = 19141;
+const DUMP_ROOT = 'dump-selftest';
 const FAKE_FILL_LIMIT = 65536;
 
 let passed = 0;
@@ -37,9 +38,24 @@ function check(name, fn) {
 }
 
 /** Replies the way the game is documented to, including refusing an unknown command. */
-function fakeMinecraft(url) {
+/**
+ * `silent` names the rung of the gate's ladder at which the fake stops answering.
+ *
+ * This is the only way to test the diagnosis, and the diagnosis is the part that matters:
+ * getting it wrong sends someone to check the wrong thing and costs another whole session.
+ */
+function fakeMinecraft(url, { silent = 'none' } = {}) {
   const socket = new WebSocket(url);
   const seen = [];
+
+  const isSilent = (line) => {
+    if (silent === 'all') return true;
+    // A paused world answers `list` (the session knows the player list) but not `say`.
+    if (silent === 'world') return !line.startsWith('list');
+    // Cheats off: chat works, commands that change blocks do not.
+    if (silent === 'privileged') return /^(setblock|fill|clone|structure|testforblock)/.test(line);
+    return false;
+  };
 
   socket.on('message', (data) => {
     const frame = JSON.parse(data.toString());
@@ -49,6 +65,7 @@ function fakeMinecraft(url) {
     if (messagePurpose === 'subscribe' || messagePurpose === 'unsubscribe') return;
 
     const line = frame.body?.commandLine ?? '';
+    if (isSilent(line)) return;
     let body;
 
     if (line.startsWith('help ')) {
@@ -89,8 +106,8 @@ function fakeMinecraft(url) {
   return { socket, seen };
 }
 
-async function runRig(rig) {
-  const probe = spawn(process.execPath, [path.join(HERE, 'probe.mjs'), '--port', String(PORT), '--rig', rig], {
+async function runRig(rig, fakeOptions = {}) {
+  const probe = spawn(process.execPath, [path.join(HERE, 'probe.mjs'), '--port', String(PORT), '--rig', rig, '--dump-root', DUMP_ROOT], {
     cwd: HERE,
     stdio: ['ignore', 'pipe', 'pipe'],
   });
@@ -111,7 +128,7 @@ async function runRig(rig) {
     }, 50);
   });
 
-  const client = fakeMinecraft(`ws://127.0.0.1:${PORT}`);
+  const client = fakeMinecraft(`ws://127.0.0.1:${PORT}`, fakeOptions);
   const exitCode = await new Promise((resolve, reject) => {
     const timer = setTimeout(() => {
       probe.kill();
@@ -125,8 +142,8 @@ async function runRig(rig) {
 
   client.socket.close();
 
-  const dumps = fs.readdirSync(path.join(HERE, 'dump')).sort();
-  const latest = path.join(HERE, 'dump', dumps[dumps.length - 1]);
+  const dumps = fs.readdirSync(path.join(HERE, DUMP_ROOT)).sort();
+  const latest = path.join(HERE, DUMP_ROOT, dumps[dumps.length - 1]);
   return {
     exitCode,
     output,
@@ -223,6 +240,66 @@ check('a rig that throws still writes what it had', () => {
   // written after the rig returns, whatever it returned.
   assert.ok(fs.existsSync(path.join(a1.dir, 'verdicts.json')));
   assert.ok(fs.existsSync(path.join(a1.dir, 'help.txt')));
+});
+
+// --- the gate ---------------------------------------------------------------------------
+//
+// a1-core's first live run spent four minutes collecting 34 timeouts, which between them
+// carried one bit of information. a2-world stops after three commands and says which of
+// three different things a person should go and check. Each branch is tested, because a
+// diagnosis that names the wrong cause is worse than none.
+
+const paused = await runRig('a2-world', { silent: 'world' });
+
+check('a world that does not tick is diagnosed as paused, not as broken', () => {
+  assert.equal(paused.verdicts.world_responds, false);
+  assert.match(paused.verdicts.diagnosis, /paused/);
+  assert.match(paused.verdicts.diagnosis, /`list` answers but `say` does not/);
+});
+
+check('the gate stops instead of running the rest of the rig', () => {
+  // The whole point: no corpus replay, no fill search, no four minutes of timeouts.
+  assert.equal(paused.verdicts.corpus_total, undefined);
+  assert.ok(paused.verdicts.fill_32768 === undefined);
+});
+
+const noPermission = await runRig('a2-world', { silent: 'privileged' });
+
+check('a live world that refuses block commands is diagnosed as permission', () => {
+  assert.equal(noPermission.verdicts.world_responds, false);
+  assert.match(noPermission.verdicts.diagnosis, /permission/);
+  assert.match(noPermission.verdicts.diagnosis, /cheats|operator/);
+});
+
+const deaf = await runRig('a2-world', { silent: 'all' });
+
+check('a socket that answers nothing is not blamed on the world', () => {
+  assert.equal(deaf.verdicts.world_responds, false);
+  assert.match(deaf.verdicts.diagnosis, /nothing answers at all/);
+});
+
+const healthy = await runRig('a2-world');
+
+check('a healthy world runs the whole rig', () => {
+  assert.equal(healthy.verdicts.world_responds, true);
+  assert.equal(healthy.verdicts.corpus_total, JSON.parse(
+    fs.readFileSync(path.join(HERE, '..', '..', 'tests', 'golden', 'commands', 'corpus.json'), 'utf8')
+  ).commands.length);
+});
+
+check('absolute corpus coordinates are moved next to the player before being sent', () => {
+  // Sent at the origin they would land in an unloaded chunk, and a chunk error would read
+  // as a syntax rejection.
+  const results = JSON.parse(fs.readFileSync(path.join(healthy.dir, 'corpus-results.json'), 'utf8'));
+  const absolute = results['setblock 0 64 0 minecraft:stone replace'];
+  assert.ok(absolute, 'the corpus entry is missing');
+  assert.match(absolute.sent, /^setblock ~ ~64 ~ /);
+});
+
+check('relative and local corpus commands are sent unchanged', () => {
+  const results = JSON.parse(fs.readFileSync(path.join(healthy.dir, 'corpus-results.json'), 'utf8'));
+  assert.equal(results['setblock ^ ^ ^5 minecraft:stone replace'].sent, 'setblock ^ ^ ^5 minecraft:stone replace');
+  assert.equal(results['setblock ~ ~ ~ minecraft:stone replace'].sent, 'setblock ~ ~ ~ minecraft:stone replace');
 });
 
 console.log(`\n${passed} passed, ${failed} failed`);

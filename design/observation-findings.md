@@ -490,3 +490,73 @@ filterInvisibleBlocks? // ★視線が通らないブロックを除外
 `PrismarineJS/bedrock-protocol` ★464 / 2026-08-23（活発、npm 3.58.3）
 `PrismarineJS/prismarine-chunk` ★70 / 2026-07-31 — `CommonChunkColumn.js` に `getBlock/getBlockStateId/getBlocks/getBlockEntity` 実装済み
 → **「Bedrock版 Mineflayer」の部品は揃っている**が、①別プレイヤーとして参加が必要 ②Educationは認証系が別で接続不可の可能性
+
+---
+
+# ★★実測による全面訂正（2026-08-24、教育版 1.26.3200、日本語クライアント）
+
+**この文書の「一括読み取り」の議論は、教育版では前提から成立しない。**
+
+`tools/live-probe` で実機に接続し、`/help` を41ページ全部（25,805バイト）取得した。
+コマンド一覧は**87個**。そこに以下は**存在しない**：
+
+| コマンド | この文書での扱い | 実測 |
+|---|---|---|
+| `getchunkdata` | 「1リクエストで16×16=256列の一括読み取り」「最優先で生JSONダンプ」 | **不明なコマンド** |
+| `getchunks` | 「併せて存在」 | **不明なコマンド** |
+| `gettopsolidblock` | 「0.64秒」「構造化・ローカライズ非依存」「blockName + blockData + position」 | **不明なコマンド** |
+| `querytarget` | （治具で使用） | **不明なコマンド** |
+
+`/help getchunkdata` の実際の返答:
+```
+不明なコマンド: getchunkdata。このコマンドが存在し、これを使用する権限があることを確認してください
+```
+
+**つまり socket-be の `world.getTopSolidBlock()` は教育版では動かない。**
+レガシーMCPの `blocks` ツールが公開している `get_top_solid_block` アクションは、
+教育版に対しては存在しないコマンドを送っている。`tool-surface-audit.md` の
+「存在しないアクションを広告している」問題と同じ種類の欠陥がもう1件ある。
+
+これらが Bedrock 統合版には存在する可能性は否定していない。**教育版に無い**ことだけが実測結果。
+配布モデルAが教育版向けである以上、設計は「無い」前提で立てる必要がある。
+
+## 代わりに存在する読み取り経路（すべてコマンド一覧から確認）
+
+| コマンド | 実測された文法 | 使いどころ |
+|---|---|---|
+| `testforblock` | `<position: x y z> <tileName: Block> [blockStates]` | 1ブロック1コマンドの逐次読み。`statusMessage` のパースが要る |
+| `execute if block` | `<position> <block> [blockStates] [chainedCommand]` | 同上だが**散文を返さない**ので翻訳に強い |
+| `execute if blocks` | `<begin> <end> <destination> <scan mode>` | **領域どうしの比較を1コマンドで** |
+| `testforblocks` | `<begin> <end> <destination> [masked\|all]` | 同上。`assess_build` の対称性判定はこれで足りる |
+| `structure save` | `<name> <from> <to> [includeEntities] [saveMode] [includeBlocks]` | `.mcstructure` 書き出し → ファイル解析（依頼者が最初に提案した経路） |
+| `clone` | `<begin> <end> <destination> [maskMode] [cloneMode]` / `filtered <cloneMode> <tileName> [blockStates]` | `edit_region` の委譲先。**文法確認済み** |
+| `takepicture` | `<cameraSpawnLocation: x y z> <targetPlayer>` ほか2形式 | 教育版固有。「AIがマイクラを見る」の別経路 |
+
+## コマンド生成器の文法が実機と一致した
+
+ゲーム自身が返した文法は、wiki から実装した内容と**完全に一致**していた：
+
+```
+/setblock <position: x y z> <tileName: Block> <blockStates: block states> [replace|destroy|keep]
+/setblock <position: x y z> <tileName: Block> [replace|destroy|keep]
+/fill <from: x y z> <to: x y z> <tileName: Block> <blockStates: block states> [oldBlockHandling: FillMode]
+/fill <from: x y z> <to: x y z> <tileName: Block> replace [replaceTileName: Block] [replaceBlockStates: block states]
+```
+
+とくに **`/setblock` のモードは `replace|destroy|keep` の3つだけ**で、`hollow`/`outline` は無い。
+レガシーの `blocks` ツールが `set_block` と `fill_area` に5値の共通enumを与えていたのは、
+実機文法に照らして誤りだったことが確定した。
+
+## 未解決：ワールド系コマンドが無応答だった
+
+`/help` 系48本はすべて応答したが、`querytarget` 以降の**34本は1本も応答が返らなかった**
+（エラーですらなく沈黙）。`help agent` が応答した98ms後に `querytarget @s` が無応答なので、
+レート制限やタイムアウトではなく**種類の問題**。
+
+原因の候補は3つあり、区別が付いていない：
+1. ワールドが動いていない（一時停止／ウィンドウ非アクティブ）
+2. 権限（チートOFF、プレイヤーが非オペレーター）
+3. ソケット側の何か
+
+`a2-world` リグは先頭3コマンド（`list` → `say` → `setblock`）でこの3つを切り分けて停止する。
+**34本のタイムアウトに4分かけて1ビットしか得られなかった**のが前回。

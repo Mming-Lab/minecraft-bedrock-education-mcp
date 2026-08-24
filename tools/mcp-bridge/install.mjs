@@ -108,6 +108,15 @@ function worldCopies() {
   return found;
 }
 
+/** The pack's identity, which is what Minecraft actually matches on. */
+function uuidOf(manifestPath) {
+  try {
+    return JSON.parse(fs.readFileSync(manifestPath, 'utf8')).header?.uuid ?? null;
+  } catch {
+    return null;
+  }
+}
+
 /** Whether the game is open, which decides whether touching world folders is a good idea. */
 function minecraftIsRunning() {
   try {
@@ -139,6 +148,7 @@ const theirs = fs.existsSync(destination) ? versionOf(path.join(destination, 'ma
 
 const ourScript = scriptVersion(path.join(source, 'scripts', 'main.js'));
 const theirScript = fs.existsSync(destination) ? scriptVersion(path.join(destination, 'scripts', 'main.js')) : null;
+const ourUuid = uuidOf(path.join(source, 'manifest.json'));
 const worlds = worldCopies();
 const running = minecraftIsRunning();
 
@@ -163,6 +173,24 @@ if (worlds.length) {
   console.log('');
 }
 
+const duplicates = fs
+  .readdirSync(target, { withFileTypes: true })
+  .filter((entry) => entry.isDirectory() && entry.name !== 'mcp-bridge')
+  .map((entry) => ({ name: entry.name, uuid: uuidOf(path.join(target, entry.name, 'manifest.json')) }))
+  .filter((entry) => entry.uuid !== null && entry.uuid === ourUuid);
+
+if (duplicates.length) {
+  // Silent when it happens, and it looks like the install simply not having worked: the game
+  // reports a version that is in none of the folders anyone was looking at.
+  console.log('  OTHER FOLDERS HERE CLAIM THE SAME PACK UUID:');
+  for (const entry of duplicates) console.log(`    ${entry.name}`);
+  console.log('');
+  console.log('  Minecraft identifies a pack by its UUID, not its folder name, and it scans every');
+  console.log('  directory here. With two claiming the same one, which gets loaded is not yours to');
+  console.log('  choose. Move these somewhere outside com.mojang.');
+  console.log('');
+}
+
 if (running) {
   console.log('  Minecraft is open. That is fine for copying, and not fine for believing the');
   console.log('  result: the running game keeps the script it loaded at startup either way.');
@@ -178,12 +206,21 @@ if (CHECK_ONLY) {
   process.exit(0);
 }
 
-// Moved aside rather than deleted. Nobody should be editing the installed copy, but "should
-// not" is not "does not", and a pack folder is exactly where someone would try a change to
-// see what it does.
+// Moved aside rather than deleted - and moved *out of the scanned folder*, which the first
+// version of this got wrong and cost two restarts to find.
+//
+// Minecraft identifies a pack by the UUID in its manifest, not by its folder name, and it
+// walks every directory under development_behavior_packs. Leaving the old copy next to the new
+// one under a different name therefore leaves two packs claiming the same UUID, and the game
+// picks one. It picked the old one, and a restart that should have brought in 0.2.0 kept
+// answering 0.1.0 out of a folder called mcp-bridge.replaced-0.0.1.
+//
+// So the backup goes above com.mojang, where nothing scans.
 let movedTo = null;
 if (fs.existsSync(destination)) {
-  movedTo = `${destination}.replaced-${theirs ?? 'unknown'}`;
+  const backups = path.join(target, '..', '..', '..', 'mcp-bridge-backups');
+  fs.mkdirSync(backups, { recursive: true });
+  movedTo = path.join(backups, `replaced-${theirs ?? 'unknown'}-script-${theirScript ?? 'unknown'}`);
   fs.rmSync(movedTo, { recursive: true, force: true });
   fs.renameSync(destination, movedTo);
 }

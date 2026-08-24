@@ -208,18 +208,23 @@ console.log('');
 // again. Reconnecting is now free, and an attempt that fails leaves a dump saying how.
 let sessionCount = 0;
 
+/** Bumped by touching rerun.txt; the marker a connection waits on between runs. */
+const TRIGGER = path.join(HERE, 'rerun.txt');
+const triggerStamp = () => {
+  try {
+    return fs.statSync(TRIGGER).mtimeMs;
+  } catch {
+    return 0;
+  }
+};
+
 wss.on('connection', async (socket) => {
   const n = ++sessionCount;
-  const stamp = new Date().toISOString().replace(/[:.]/g, '-');
-  const dump = path.join(DUMP_ROOT, `${stamp}-${String(n).padStart(2, '0')}`);
-  fs.mkdirSync(dump, { recursive: true });
-  const frameLog = fs.createWriteStream(path.join(dump, 'frames.jsonl'), { flags: 'a' });
-  const record = (direction, frame, extra = {}) => {
-    frameLog.write(JSON.stringify({ t: since(), direction, frame, ...extra }) + '\n');
-  };
+  let open = true;
+  let session = null;
+  let record = () => {};
 
-  log(`connection ${n} from ${socket._socket?.remoteAddress ?? 'unknown'} -> ${path.basename(dump)}`);
-  const session = new Session(socket, record);
+  log(`connection ${n} from ${socket._socket?.remoteAddress ?? 'unknown'}`);
 
   socket.on('message', (data) => {
     const text = data.toString();
@@ -232,11 +237,53 @@ wss.on('connection', async (socket) => {
       return;
     }
     record('in', frame);
-    session.handle(frame);
+    session?.handle(frame);
   });
 
-  socket.on('close', () => log(`connection ${n} closed`));
+  socket.on('close', () => {
+    open = false;
+    log(`connection ${n} closed`);
+  });
   socket.on('error', (error) => log(`connection ${n} socket error:`, error.message));
+
+  // A connection can run the rig more than once.
+  //
+  // It used to run it exactly once and then sit there, which turned out to be the trap the
+  // whole afternoon was stuck in: the game holds the socket open, `/connect out` does not
+  // actually close it - measured, still ESTABLISHED afterwards - so a further /connect is
+  // ignored and the connection can never be replaced. Asking someone to reconnect was asking
+  // for something the game would not do. Touching rerun.txt runs the rig again on the socket
+  // that is already there.
+  let runNumber = 0;
+  let lastTrigger = triggerStamp();
+
+  while (open) {
+    runNumber++;
+    const stamp = new Date().toISOString().replace(/[:.]/g, '-');
+    const dump = path.join(DUMP_ROOT, `${stamp}-${String(n).padStart(2, '0')}-${String(runNumber).padStart(2, '0')}`);
+    fs.mkdirSync(dump, { recursive: true });
+    const frameLog = fs.createWriteStream(path.join(dump, 'frames.jsonl'), { flags: 'a' });
+    record = (direction, frame, extra = {}) => {
+      frameLog.write(JSON.stringify({ t: since(), direction, frame, ...extra }) + '\n');
+    };
+    session = new Session(socket, record);
+    log(`run ${runNumber} -> ${path.basename(dump)}`);
+    await runOnce(session, dump, n, runNumber, stamp);
+    frameLog.end();
+
+    if (ONCE) {
+      process.exit(0);
+    }
+
+    log(`still connected. Touch rerun.txt to run again (${path.relative(process.cwd(), TRIGGER)}).`);
+    while (open && triggerStamp() === lastTrigger) {
+      await new Promise((resolve) => setTimeout(resolve, 500));
+    }
+    lastTrigger = triggerStamp();
+  }
+});
+
+async function runOnce(session, dump, n, runNumber, stamp) {
 
   // Which rig, and its current contents, are both decided at connection time.
   //
@@ -294,14 +341,8 @@ wss.on('connection', async (socket) => {
   );
 
   log('');
-  log(`connection ${n}: ${Object.keys(session.notes).length} answers -> ${path.join(dump, 'verdicts.json')}`);
-  if (ONCE) {
-    frameLog.end(() => process.exit(0));
-  } else {
-    frameLog.end();
-    log('still listening. /connect again to run the rig again.');
-  }
-});
+  log(`connection ${n} run ${runNumber}: ${Object.keys(session.notes).length} answers -> ${path.join(dump, 'verdicts.json')}`);
+}
 
 wss.on('error', (error) => {
   console.error(`\nserver error: ${error.message}`);

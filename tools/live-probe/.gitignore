@@ -4,3 +4,4 @@ node_modules/
 dump/
 dump-selftest/
 .socketbe/
+rerun.txt

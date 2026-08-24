@@ -3,3 +3,4 @@ node_modules/
 # machine-specific; promote the frames you want as CI fixtures explicitly.
 dump/
 dump-selftest/
+.socketbe/

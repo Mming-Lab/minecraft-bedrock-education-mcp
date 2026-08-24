@@ -177,6 +177,13 @@ async function runRig(rig, fakeOptions = {}) {
   };
 }
 
+/** The chat lines a rig sent, as the player would have seen them. */
+const ladderSaid = (sent) =>
+  sent
+    .map((f) => f.body?.commandLine ?? '')
+    .filter((line) => line.startsWith('say '))
+    .map((line) => line.slice(4));
+
 console.log('live-probe self-test\n');
 
 const a0 = await runRig('a0-connect');
@@ -247,6 +254,15 @@ check('a world that answers immediately is not accused of having been paused', (
   assert.equal(focusLive.verdicts.world_responds, true);
   assert.equal(focusLive.verdicts.polls_before_answer, 1);
   assert.match(focusLive.verdicts.reading, /never paused/);
+});
+
+check('the rig reports progress into the game, not only to a terminal', () => {
+  // The failure this exists for: the rig's only output was a terminal, and looking at a
+  // terminal pauses the world it is measuring. Two live sessions were lost to that before
+  // the feedback moved to where the player already is.
+  const said = ladderSaid(focusLive.sent);
+  assert.ok(said.some((s) => /Running measurements/.test(s)), 'never said it had started');
+  assert.ok(said.some((s) => /DONE/.test(s)), 'never said it had finished');
 });
 
 check('a live world goes straight on to the measurements', () => {

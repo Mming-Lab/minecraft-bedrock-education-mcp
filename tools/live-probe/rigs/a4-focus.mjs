@@ -24,11 +24,28 @@ import { runBattery } from './_battery.mjs';
 const answered = (r) => !r.timedOut;
 
 const POLL_EVERY = 2000;
-const GIVE_UP_AFTER = Number(process.env.PROBE_FOCUS_WAIT ?? 90000);
+// Ten minutes, because the person it is waiting for has to be in the game for the whole run
+// and cannot be told when to go back. The first version waited ninety seconds and spent all
+// of it on a paused world, which is the same mistake as before wearing a different hat: the
+// only way to say "the rig is ready" was a terminal the player had to alt-tab to, and
+// alt-tabbing is what pauses the world.
+const GIVE_UP_AFTER = Number(process.env.PROBE_FOCUS_WAIT ?? 600000);
+
+/**
+ * Says something in the game.
+ *
+ * The whole reason this rig kept failing is that its only output was a terminal nobody could
+ * look at without breaking the thing being measured. Once the world is answering, it can be
+ * told what is happening in the one place the player is already looking.
+ */
+async function announce(session, text) {
+  await session.command(`say §b[probe]§r ${text}`, { timeout: 3000 });
+}
 
 export async function run(session, { log, dump }) {
   log('waiting for the world to answer. Stay in the game window - do not alt-tab.');
   log(`polling every ${POLL_EVERY / 1000}s for up to ${GIVE_UP_AFTER / 1000}s.`);
+  log('progress will be announced in the game chat once the world responds.');
 
   const timeline = [];
   const startedAt = Date.now();
@@ -82,5 +99,27 @@ export async function run(session, { log, dump }) {
 
   log('');
   log('world is live - running the full battery');
-  await runBattery(session, { log, dump });
+
+  await announce(session, 'world is awake. Running measurements - stay in the game.');
+  await announce(session, 'this takes about two minutes. I will say DONE when it is safe to alt-tab.');
+
+  let failure = null;
+  try {
+    await runBattery(session, { log, dump });
+  } catch (error) {
+    failure = String(error.message ?? error);
+    session.note('battery_error', failure);
+    log('battery threw:', error.stack ?? failure);
+  }
+
+  // Said even when the battery threw, because the person in the game needs to know they can
+  // stop staring at it either way.
+  await announce(session, failure ? `§cFAILED§r: ${failure.slice(0, 80)}` : '§aDONE§r - you can alt-tab now.');
+  const rejected = session.notes.corpus_rejected_count;
+  if (failure === null) {
+    await announce(
+      session,
+      `${Object.keys(session.notes).length} answers recorded${rejected === undefined ? '' : `, ${rejected} commands rejected`}.`
+    );
+  }
 }

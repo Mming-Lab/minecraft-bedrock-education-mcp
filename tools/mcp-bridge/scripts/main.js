@@ -117,6 +117,75 @@ const handlers = {
   },
 
   /**
+   * Entities near a point - which the world file cannot give.
+   *
+   * This is what the add-on is actually for. Bulk block reading goes to the database: it has
+   * the blocks with their states already, unlimited in area, and needs no add-on at all. What
+   * the database does not have is anything live - where a mob is right now, what is in a
+   * chest, who is standing where.
+   */
+  entities(id, args) {
+    const dimension = world.getDimension(args.dimension || 'overworld');
+    const found = dimension.getEntities({
+      location: { x: args.x, y: args.y, z: args.z },
+      maxDistance: args.radius || 16,
+    });
+
+    const entities = found.slice(0, args.limit || 20).map((entity) => {
+      const at = entity.location;
+      const record = {
+        type: entity.typeId,
+        x: Math.round(at.x * 10) / 10,
+        y: Math.round(at.y * 10) / 10,
+        z: Math.round(at.z * 10) / 10,
+      };
+      // Not every entity has every component, and asking for one it lacks throws rather than
+      // returning nothing - so each is its own attempt.
+      try {
+        const health = entity.getComponent('health');
+        if (health) record.health = Math.round(health.currentValue);
+      } catch { /* no health component */ }
+      try {
+        if (entity.nameTag) record.name = entity.nameTag;
+      } catch { /* no name */ }
+      return record;
+    });
+
+    reply(id, { ok: true, total: found.length, returned: entities.length, entities });
+  },
+
+  /**
+   * What is in a container - also absent from any command.
+   *
+   * The database does hold chest contents, but reading them means decoding a BlockEntity
+   * record and waiting for a flush; this answers now.
+   */
+  container(id, args) {
+    const dimension = world.getDimension(args.dimension || 'overworld');
+    const block = dimension.getBlock({ x: args.x, y: args.y, z: args.z });
+    if (!block) {
+      reply(id, { ok: false, error: 'chunk not loaded' });
+      return;
+    }
+    let inventory = null;
+    try {
+      inventory = block.getComponent('inventory');
+    } catch { /* not a container */ }
+    if (!inventory) {
+      reply(id, { ok: false, error: 'not a container', name: block.typeId });
+      return;
+    }
+
+    const container = inventory.container;
+    const items = [];
+    for (let slot = 0; slot < container.size; slot++) {
+      const item = container.getItem(slot);
+      if (item) items.push({ slot, type: item.typeId, amount: item.amount });
+    }
+    reply(id, { ok: true, name: block.typeId, size: container.size, items });
+  },
+
+  /**
    * How much gets through, and how fast.
    *
    * Chat lines have a length limit somewhere and possibly a rate limit; neither is documented

@@ -75,7 +75,7 @@ export async function run(session, { log }) {
   } else if (viaSay.prefixed === viaTell.prefixed) {
     verdict = `Both paths arrive ${viaSay.prefixed ? 'with' : 'without'} the name prefix, so the prefix does not distinguish them and the design note that says it does is wrong.`;
   } else if (ping.prefixed === viaSay.prefixed) {
-    verdict = 'The prefix does distinguish them, and ping looks like say - so the pack loaded in this world is the older one that broadcasts. Reinstall tools/mcp-bridge and restart the game before the classroom claim means anything.';
+    verdict = 'The prefix does distinguish them, and ping looks like say - so the pack loaded in this world is the older one that broadcasts. Reinstall packages/server/addon and restart the game before the classroom claim means anything.';
   } else {
     verdict = 'The prefix does distinguish them, and ping looks like tell. The pack is current; D-1 read a stale line.';
   }

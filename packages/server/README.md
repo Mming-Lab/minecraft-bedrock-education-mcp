@@ -3,7 +3,7 @@
 An MCP server that lets a model build in Minecraft Education — and, unlike its predecessor,
 look at what it built.
 
-Fifteen tools: nine shapes, a layer grid, and five for reading the world. The reading half is
+Seventeen tools: nine shapes, a layer grid, and seven for reading the world. The reading half is
 the point. A tool that places blocks and cannot see them leaves a model guessing whether the
 tower landed where it meant, so it cannot correct itself; it can only build again and hope.
 
@@ -25,8 +25,10 @@ Three steps, in this order. The middle one is the one people skip.
 ### 1. Install the add-on
 
 ```bash
-node tools/mcp-bridge/install.mjs
+npx -p @mming-lab/minecraft-bedrock-education-mcp mcp-bridge-install
 ```
+
+From a checkout of this repository, that is `node packages/server/addon/install.mjs`.
 
 Then, and this is not optional:
 
@@ -37,7 +39,7 @@ Then, and this is not optional:
 - **Activate "MCP Bridge" in the world's behaviour pack settings.** A world that has never had
   it activated will not load it.
 
-`node tools/mcp-bridge/install.mjs --check` reports versions without changing anything. Note
+Adding `--check` reports versions without changing anything. Note
 what it compares: files on disk. What the game is *running* can be older than both, and only
 `world.bridge_status` can tell you that.
 
@@ -54,9 +56,16 @@ what it compares: files on disk. What the game is *running* can be older than bo
 }
 ```
 
-Once the package is published, that becomes `npx -y @mming-lab/minecraft-bedrock-education-mcp`
-with no local checkout and no build step. It is not published yet, so the path above is what
-works today.
+Once the package is published, that becomes:
+
+```json
+{ "mcpServers": { "minecraft": {
+    "command": "npx",
+    "args": ["-y", "@mming-lab/minecraft-bedrock-education-mcp"] } } }
+```
+
+with no checkout and no build step — the add-on ships inside the package, which is why step 1
+works from `npx` too. It is not published yet, so the path above is what works today.
 
 Options, as flags or environment variables:
 
@@ -103,6 +112,8 @@ about a quarter of a second.
 
 | | |
 |---|---|
+| `world.players` | Where everyone is. **Start here** — every other reading tool needs coordinates, and nothing else can supply the first ones |
+| `world.agent` | Where the Agent is, and deliberately without summoning one |
 | `world.bridge_status` | Connected? Add-on loaded? Which version? **Start here when something is wrong** |
 | `world.get_block` | One block, with its states |
 | `world.read_region` | Up to 4096 blocks as a layer grid |
@@ -156,7 +167,7 @@ actually in the world, read it.
 ## Development
 
 ```bash
-npm test          # build, then eleven suites
+npm test          # build, then twelve suites
 npm run test:golden
 ```
 
@@ -181,6 +192,7 @@ someone has to launch the game and type `/connect`.
 | `src/bridge/protocol.ts` | The wire format to the add-on: splitting, reassembly, loss detection |
 | `src/bridge/transport.ts` | The socket, over socket-be |
 | `src/world/layers.ts` | Region to layer grid |
+| `addon/` | The behaviour pack that runs inside the game, shipped with the package |
 | `src/world/records.ts` | Decoders for the world database (subchunks, structures) |
 | `src/tools/` | A tool is data, not a subclass |
 | `src/server.ts` | The only file that knows the MCP SDK exists |

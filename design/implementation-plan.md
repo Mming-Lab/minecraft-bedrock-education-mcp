@@ -177,7 +177,7 @@ MCP ← player.runCommand('tell @s MCPB|<id>|<json>')  → PlayerMessage イベ�
 
 **すべてCIで回る**（`.github/workflows/ci.yml`、3ジョブ）。ゲームもソケットも不要。
 
-## 3.2 `tools/mcp-bridge/`
+## 3.2 `packages/server/addon/`
 
 アドオン本体。ハンドラ：
 
@@ -191,7 +191,8 @@ MCP ← player.runCommand('tell @s MCPB|<id>|<json>')  → PlayerMessage イベ�
 
 `bench` と `channel`（帯域測定と経路比較）は**測定が終わったので削除した**。git 履歴にある。
 
-**導入：`node tools/mcp-bridge/install.mjs`**（`--check` で確認のみ）。
+**導入：`npx -p @mming-lab/... mcp-bridge-install`**、またはリポジトリから
+`node packages/server/addon/install.mjs`（`--check` で確認のみ）。
 コピーの後に**ゲームの完全再起動**と**ワールド設定での有効化**が要る。どちらも自動化できない。
 
 ## 3.3 `tools/live-probe/`
@@ -232,7 +233,9 @@ touch rerun.txt          # 再実行（再接続不要）
 
 ## 4.3 アドオンの配布
 
-現在 `tools/mcp-bridge/` は検証用の置き場。配布時に：
+**`packages/server/addon/` に移し、`files` と `bin` に載せた**（2026-08-25）。
+`npx` で入れた教員の手元にアドオンが無ければ `world.*` が全滅するので、
+**同梱していないものを「npx 一発」とは呼べない**。残り：
 
 - ~~`bench` / `channel` ハンドラを削除~~ 済み
 - `install.mjs` がコピーする（実装済み）。`.mcaddon` 化は未着手
@@ -281,7 +284,7 @@ touch rerun.txt          # 再実行（再接続不要）
 - このツールだけは**例外を投げない**。他のツールが失敗したから呼ばれるので、
   自分も失敗したら「壊れているものが4つ目に増える」だけになる
 
-導入は `node tools/mcp-bridge/install.mjs`（`--check` で確認のみ）。
+導入は `node packages/server/addon/install.mjs`（`--check` で確認のみ）。
 **`--check` が見るのはディスク上のファイル。実行中の版は `world.bridge_status` でしか分からない。**
 
 ### コピーは1箇所ではない（2026-08-25、実機で確認）

@@ -33,6 +33,7 @@
  * again. Slower on the rare bad guess, and never silently short.
  */
 
+import { readFileSync } from 'node:fs';
 import { z } from 'zod';
 import { BridgeProtocolError, type Assembled } from '../bridge/index.js';
 import { toLayers, type LayeredRegion } from '../world/layers.js';
@@ -83,14 +84,29 @@ function headerOf(reply: Assembled, expected: readonly string[] = []): AddonRepl
 // --- is anything on the other end? ------------------------------------------------------------
 
 /**
- * The add-on version this server was written against.
+ * The add-on version this server expects, read from the add-on it ships with.
  *
- * Checked rather than assumed because the two have already disagreed without anyone noticing.
- * Pack folders are scanned when the game launches, so replacing the files and reloading the
- * world leaves the previous script running - and a decision was recorded as done on that
- * basis while the game went on doing the old thing for a day.
+ * Read rather than written down, because a constant here and a version in the manifest are
+ * two things that can disagree - and this whole check exists because two copies of the same
+ * add-on disagreed without anyone noticing.
+ *
+ * Read lazily, and never fatally. A missing manifest means a broken install, but the building
+ * tools do not need it, and taking the server down over it would remove capabilities that
+ * were working. `world.bridge_status` is the one place that cares, and it reports rather than
+ * throws.
  */
-export const EXPECTED_ADDON_VERSION = '0.2.0';
+export function expectedAddonVersion(): string {
+  try {
+    // From dist/tools/ up to the package root, where `files` puts the add-on.
+    const manifest = JSON.parse(
+      readFileSync(new URL('../../addon/manifest.json', import.meta.url), 'utf8')
+    ) as { header?: { version?: number[] } };
+    const version = manifest.header?.version;
+    return Array.isArray(version) ? version.join('.') : 'unreadable';
+  } catch {
+    return 'not installed';
+  }
+}
 
 export const worldBridgeStatus = (bridge: WorldBridge) =>
   defineTool({
@@ -117,20 +133,23 @@ export const worldBridgeStatus = (bridge: WorldBridge) =>
     },
     annotations: { readOnlyHint: true },
     handler: async () => {
+      // Outside the try: the catch below reports it too, and a bridge that never answered
+      // still leaves "what this server expects" worth saying.
+      const expected = expectedAddonVersion();
       try {
         const header = headerOf(await bridge.request('ping'));
         const addonVersion = String(header.version ?? 'unknown');
-        const upToDate = addonVersion === EXPECTED_ADDON_VERSION;
+        const upToDate = addonVersion === expected;
         return {
           connected: true,
           addonVersion,
-          expectedVersion: EXPECTED_ADDON_VERSION,
+          expectedVersion: expected,
           upToDate,
           players: Number(header.players ?? 0),
           tick: Number(header.tick ?? 0),
           advice: upToDate
             ? null
-            : `The game is running add-on ${addonVersion} and this server expects ${EXPECTED_ADDON_VERSION}. ` +
+            : `The game is running add-on ${addonVersion} and this server expects ${expected}. ` +
               `Copying the files over is not enough: pack folders are only scanned when Minecraft launches, ` +
               `so the game has to be closed and reopened — reloading the world keeps the old script.`,
         };
@@ -141,7 +160,7 @@ export const worldBridgeStatus = (bridge: WorldBridge) =>
         return {
           connected: false,
           addonVersion: null,
-          expectedVersion: EXPECTED_ADDON_VERSION,
+          expectedVersion: expected,
           upToDate: false,
           players: 0,
           tick: 0,

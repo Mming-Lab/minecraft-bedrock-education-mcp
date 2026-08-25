@@ -209,5 +209,5 @@ DBが勝つのは「アドオンから見えない領域」と「アドオンを
 | 1行の上限 | **481文字**（487文字は全滅） |
 | 行数 | 200行連続で欠落0 |
 
-実装は `tools/mcp-bridge/`。ハンドラは
+実装は `packages/server/addon/`。ハンドラは
 `ping` / `getblock` / `readregion` / `entities` / `container` / `bench`。

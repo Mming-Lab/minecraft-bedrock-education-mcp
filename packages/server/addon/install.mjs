@@ -1,3 +1,4 @@
+#!/usr/bin/env node
 // Copies the bridge add-on into Minecraft Education's pack folder.
 //
 //   node install.mjs            # copy, and say what to do next

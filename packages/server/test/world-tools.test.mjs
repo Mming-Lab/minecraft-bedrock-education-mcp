@@ -17,7 +17,7 @@ import assert from 'node:assert/strict';
 
 import { BridgeProtocolError } from '../dist/bridge/protocol.js';
 import { toLayers, indexOf, RegionTooVariedError } from '../dist/world/layers.js';
-import { toolsFor, offlineBridge, EXPECTED_ADDON_VERSION } from '../dist/tools/index.js';
+import { toolsFor, offlineBridge, expectedAddonVersion } from '../dist/tools/index.js';
 
 let passed = 0;
 let failed = 0;
@@ -319,7 +319,9 @@ await test('an add-on older than the server is reported, with what to do about i
 
 await test('a current add-on reports no advice at all', async () => {
   const bridge = fakeBridge(() => ({
-    header: { ok: true, version: EXPECTED_ADDON_VERSION, tick: 99, players: 2 },
+    // Read from the shipped add-on's manifest rather than restated here, so this test cannot
+    // pass against a constant that has drifted from the file the game is given.
+    header: { ok: true, version: expectedAddonVersion(), tick: 99, players: 2 },
     parts: [],
   }));
   const status = await tools(bridge).get('world.bridge_status').handler({});

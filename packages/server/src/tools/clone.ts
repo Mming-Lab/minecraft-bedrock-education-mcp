@@ -7,9 +7,15 @@
  * comes back as `oak_stairs` and goes back down facing whichever way is default. Reading a
  * house and rebuilding it elsewhere straightens every stair and shuts every door.
  *
- * `/clone` never converts anything. The game copies the blocks in place, states and all, and
- * one command does it - so nothing can change underneath a read-then-write pair. It also
- * carries far more than the 4096 blocks a region read is limited to.
+ * `/clone` never converts anything. The game copies the blocks in place and one command does
+ * it, so nothing can change underneath a read-then-write pair, and it carries far more than
+ * the 4096 blocks a region read is limited to.
+ *
+ * Measured rather than assumed, on Education 1.26: a staircase placed at `weirdo_direction: 2`
+ * cloned to a staircase at `weirdo_direction: 2`. A chest cloned to a chest. **Whether the
+ * chest's contents come with it is untested** - nothing on the tool surface can put an item in
+ * a chest, so an empty chest copying to an empty chest proves nothing about what was inside.
+ * The description says states, and does not claim contents.
  *
  * ## What this deliberately does not do
  *
@@ -32,10 +38,16 @@ import { BlockCoordinate, defineTool, type AnyToolDefinition } from './types.js'
 /**
  * The largest region `/clone` will copy.
  *
- * From the Bedrock command reference — 524288 blocks, eight chunks' worth. **Not measured on
- * hardware**, unlike the `/fill` limit of 32768, which the game itself stated when asked for
- * 33792. The same source got that one right, which is a reason to believe this and not a
- * reason to stop calling it unverified.
+ * From the Bedrock command reference — 524288 blocks, eight chunks' worth. **Still not
+ * measured**, unlike the `/fill` limit of 32768, which the game itself stated when asked for
+ * 33792.
+ *
+ * An attempt to measure it found something more useful instead. Asking for 512000 blocks two
+ * hundred blocks away came back with `ワールドの外にあるブロックにはアクセスできません` -
+ * "cannot access blocks outside the world" - because the chunks were not loaded. A region big
+ * enough to test this limit is far bigger than the area a player keeps loaded, so in practice
+ * the loaded area runs out long before the limit does. That is the constraint worth telling a
+ * caller about; this number is a backstop behind it.
  */
 export const CLONE_VOLUME_LIMIT = 524288;
 
@@ -47,8 +59,9 @@ export const buildCloneRegionTool = (runner: CommandRunner) =>
     name: 'build.clone_region',
     title: 'Copy or move a region',
     description: [
-      'Copy a box of blocks to somewhere else, or move it, with block states and container contents intact.',
-      'Use this whenever the thing being moved is more than plain blocks — stairs that face a direction, doors, chests with something in them, signs. It is also the only way to shift more than 4096 blocks, and the only one that happens in a single command, so nothing can change halfway through.',
+      'Copy a box of blocks to somewhere else, or move it. Block states are kept — a staircase arrives facing the way it faced, measured on a real game.',
+      'Use this whenever the thing being moved is more than plain blocks: stairs, doors, signs, anything with an orientation. It is also the only way to shift more than 4096 blocks, and the only one that happens in a single command, so nothing can change halfway through.',
+      'Both regions must be in loaded chunks. A copy to somewhere far from any player fails with "cannot access blocks outside the world" — that is about loading, not about the world edge, and it will bite long before the size limit does.',
       'Set clone_mode to "move" to take the blocks with you: the source is left as air. "force" allows the source and destination to overlap. "normal", the default, refuses an overlap rather than producing something half-copied.',
       'Set mask_mode to "masked" to copy only the solid blocks, leaving whatever is already at the destination showing through the gaps. "replace", the default, copies the air too.',
       'It canNOT rotate or mirror — Bedrock has no such option. For a quarter turn, read the region with world.read_region, transpose the rows yourself, and send the grid to build.layers; that loses block states, which is why it is not what this tool does.',

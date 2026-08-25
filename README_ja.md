@@ -55,7 +55,16 @@ node packages/server/addon/install.mjs
 `--check` を付けると、変更せずに版だけ報告します。ただし**それが見るのはディスク上のファイル**です。
 **ゲームが実際に動かしている版は、`world.bridge_status` にしか分かりません。**
 
-### 2. MCP クライアントの設定
+### 2. サーバをビルドして、MCP クライアントから指す
+
+`dist/` はリポジトリに入っていないので、clone しただけでは動かすものがありません：
+
+```bash
+npm install --prefix packages/server
+npm run build
+```
+
+これで `packages/server/dist/index.js` ができます。クライアントが起動するのはこれです：
 
 ```json
 {

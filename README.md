@@ -60,7 +60,16 @@ Adding `--check` reports versions without changing anything. Note
 what it compares: files on disk. What the game is *running* can be older than both, and only
 `world.bridge_status` can tell you that.
 
-### 2. Point an MCP client at the server
+### 2. Build the server, then point an MCP client at it
+
+`dist/` is not in the repository, so a fresh checkout has nothing to run yet:
+
+```bash
+npm install --prefix packages/server
+npm run build
+```
+
+That writes `packages/server/dist/index.js`, which is what the client spawns:
 
 ```json
 {
@@ -193,7 +202,7 @@ actually in the world, read it.
 ## Development
 
 ```bash
-npm run verify    # build, fourteen suites, and the geometry goldens
+npm run verify    # build, sixteen suites, and the geometry goldens
 ```
 
 Everything runs without Minecraft. The end-to-end test spawns the server as a child process

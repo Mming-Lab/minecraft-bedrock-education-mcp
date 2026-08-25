@@ -277,7 +277,25 @@ export const worldReadRegion = (bridge: WorldBridge) =>
         .describe('How many blocks were in unloaded chunks. Above zero, the read is partial.'),
     },
     annotations: { readOnlyHint: true, idempotentHint: true },
-    handler: async ({ corner1, corner2, dimension }): Promise<LayeredRegion> => {
+    handler: async ({ corner1, corner2, dimension }): Promise<LayeredRegion> =>
+      readRegion(bridge, corner1, corner2, dimension),
+  });
+
+/**
+ * Reads a box and returns it as layers.
+ *
+ * Split out of the tool because more than one tool needs a region: `assess.*` measures the same
+ * grid rather than fetching it a second way. Keeping one function means the retry, the
+ * completeness check and the air/unread distinction cannot diverge between callers - and those
+ * three are the whole reason reading a region is not just a loop over `get_block`.
+ */
+export async function readRegion(
+  bridge: WorldBridge,
+  corner1: { x: number; y: number; z: number },
+  corner2: { x: number; y: number; z: number },
+  dimension?: string
+): Promise<LayeredRegion> {
+  {
       const min = {
         x: Math.min(corner1.x, corner2.x),
         y: Math.min(corner1.y, corner2.y),
@@ -345,8 +363,8 @@ export const worldReadRegion = (bridge: WorldBridge) =>
         `the region could not be read whole even at ${perMessage} blocks per message. ` +
           `Last refusal: ${lastRefusal?.message ?? 'unknown'}`
       );
-    },
-  });
+  }
+}
 
 // --- what is alive, and what is in the boxes --------------------------------------------------
 

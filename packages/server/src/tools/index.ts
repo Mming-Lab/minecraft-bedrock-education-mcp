@@ -4,12 +4,14 @@ export * from './world.js';
 export * from './layers.js';
 export * from './players.js';
 export * from './clone.js';
+export * from './assess.js';
 
 import { buildTools } from './build.js';
 import { offlineBridge, worldTools, type WorldBridge } from './world.js';
 import { layerTools } from './layers.js';
 import { playerTools } from './players.js';
 import { cloneTools } from './clone.js';
+import { assessTools } from './assess.js';
 import { BuildOutcome, type AnyToolDefinition, type PlannedBuild } from './types.js';
 import { placeBlocks } from '../execute/placer.js';
 import type { CommandRunner } from '../bridge/index.js';
@@ -78,6 +80,9 @@ export function toolsFor(bridge: WorldBridge, runner: CommandRunner = offlineRun
     // needs no coordinates, and every other one needs coordinates.
     ...playerTools(runner),
     ...worldTools(bridge),
+    // After the reading tools, because measuring is what you do with a region once you can
+    // read one.
+    ...assessTools(bridge),
   ];
 }
 

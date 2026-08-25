@@ -3,7 +3,7 @@
 An MCP server that lets a model build in Minecraft Education — and, unlike its predecessor,
 look at what it built.
 
-Eighteen tools: nine shapes, a layer grid, a region copier, and seven for reading the world. The reading half is
+Twenty tools: nine shapes, a layer grid, a region copier, seven for reading the world, and two for measuring what is there. The reading half is
 the point. A tool that places blocks and cannot see them leaves a model guessing whether the
 tower landed where it meant, so it cannot correct itself; it can only build again and hope.
 
@@ -127,6 +127,19 @@ about a quarter of a second.
 | `world.entities` | Mobs, players, dropped items — the one thing no other route can answer |
 | `world.container` | What is in a chest |
 
+### Measuring
+
+| | |
+|---|---|
+| `assess.symmetry` | How well a build matches itself, mirrored or turned — and **where** it does not |
+| `assess.composition` | Dimensions, footprint, how much is air, what it is made of |
+
+Neither returns a score. They return how many pairs matched and which ones did not, because a
+mark out of ten cannot tell a child who mirrored a castle badly from a child who built an
+asymmetric one on purpose — and only one of those wants correcting. A pair where one side was
+in an unloaded chunk is counted apart from both, so a slow chunk load never reports a careful
+build as lopsided.
+
 ## Why a region comes back as a grid
 
 `world.read_region` answers in horizontal layers of single characters with a palette, not a
@@ -179,8 +192,7 @@ actually in the world, read it.
 ## Development
 
 ```bash
-npm test          # build, then thirteen suites
-npm run test:golden
+npm run verify    # build, fourteen suites, and the geometry goldens
 ```
 
 Everything runs without Minecraft. The end-to-end test spawns the server as a child process

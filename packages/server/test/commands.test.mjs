@@ -9,7 +9,7 @@
 // in the legacy server and each produced a command the game answered in a way nobody read.
 //
 // What this cannot check is whether Minecraft accepts what comes out. Every accepted string
-// is written to tests/golden/commands/corpus.json so that a live session can replay the set
+// is written to test/fixtures/commands-corpus.json so that a live session can replay the set
 // and answer that separately.
 
 import assert from 'node:assert/strict';
@@ -33,7 +33,7 @@ import {
 import { BlockId } from '../dist/tools/types.js';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
-const CORPUS = path.join(HERE, '..', '..', '..', 'tests', 'golden', 'commands', 'corpus.json');
+const CORPUS = path.join(HERE, 'fixtures', 'commands-corpus.json');
 
 let passed = 0;
 let failed = 0;

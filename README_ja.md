@@ -1,157 +1,202 @@
-# Minecraft Bedrock MCP Server
+# minecraft-bedrock-education-mcp
 
-[English README here / 英語版 README はこちら](README.md)
+[English README](README.md)
 
-Minecraft統合版（Bedrock Edition）・教育版（Education Edition）を制御するTypeScript製MCPサーバーです。
-
-<a href="https://glama.ai/mcp/servers/@Mming-Lab/minecraft-bedrock-mcp-server">
+<a href="https://glama.ai/mcp/servers/Mming-Lab/minecraft-bedrock-education-mcp">
   <img width="380" height="200" src="https://glama.ai/mcp/servers/@Mming-Lab/minecraft-bedrock-mcp-server/badge" alt="Minecraft Bedrock Education MCP server" />
 </a>
 
-## 特徴
+> **v2 — 書き直しました。** ここにあった単一パッケージ版は
+> [`legacy/v1.0.0`](../../releases/tag/legacy/v1.0.0) タグに凍結してあり、**今もビルドして動きます**
+> （`git clone -b legacy/v1.0.0` で当時の README ごと取れます）。旧版は Node 16 で20ツール、
+> **ワールドを読むことができませんでした。** この版は **Node 22 以上**、実装は
+> [`packages/server`](packages/server)、そして**読めます** — そのために
+> [`packages/server/addon`](packages/server/addon) のアドオンが要ります。
 
-- **コアツール**: プレイヤー、エージェント、ブロック、ワールド、カメラ、システム制御
-- **高度建築**: 12種類の3D形状ツール（立方体、球体、螺旋、トーラス、ベジェ曲線等）
-- **Wiki統合**: Minecraft Wiki検索で正確な情報取得
-- **シーケンス機能**: 複数操作を自動連携
-- **自然な対話**: 自然言語でMinecraftを操作
+AIが Minecraft Education で建築し、**そして建てたものを見られる** MCP サーバです。
 
-## クイックスタート
+23ツール（形状9、層グリッド、領域複製、読み取り10、測定2）。**読める方が本体です。**
+置くだけで見えない道具は、AIに「思ったところに建ったか」を想像させます。想像が外れても
+気づけないので、直せません。建てて、読んで、直す — それができるようになりました。
 
-### 1. インストール
+## 必要なもの
+
+- **Minecraft Education 1.26 以降**、この MCP サーバと**同じPC**に。
+  ゲームがサーバに接続する向きなので、同居している必要があります
+- **Node 22 以降**
+- アドオン導入スクリプトは Windows 前提です（サーバ本体はOSを選びません）
+
+Bedrock 版でも建築はできます。**読み取りにはアドオンが要り**、アドオンには Script API が要ります。
+
+## 導入（3手順。真ん中が飛ばされます）
+
+### 1. アドオンを入れる
+
+**ここは人がやります。** 3つのうち2つは、キーボードの前にいる人にしかできません。
+スクリプトが自動化するのはファイルのコピーだけです。
 
 ```bash
-git clone https://github.com/Mming-Lab/minecraft-bedrock-education-mcp.git
-cd minecraft-bedrock-education-mcp
-npm install
-npm run build
-npm start
+node packages/server/addon/install.mjs
 ```
 
-### 2. Minecraft接続
+`packages/server/addon` フォルダを、ゲームの `development_behavior_packs` へ手でコピーしても同じです。
+スクリプトは「今どの版が入っているか」を報告し、**終わりに「完了」ではなく次の2手順を言う**ために
+あります。
 
-Minecraftでワールドを開き（チート有効）、チャット欄で：
-```
-/connect localhost:8001/ws
-```
+そのあと、**これは省略できません**：
 
-### 3. AIアシスタント設定
+- **Minecraft Education を完全に終了して、開き直してください。**
+  パックフォルダは**起動時にしか読まれません**。ワールドの再読み込みでは足りず、
+  ゲームは起動時のスクリプトを動かし続けて、**そのことを何も言いません。**
+  これで1日失いました
+- **ワールドの設定で「MCP Bridge」を有効にしてください。**
+  一度も有効にしていないワールドでは読み込まれません
 
-MCPクライアント（Claude Desktop等）の設定ファイルに追加：
+`--check` を付けると、変更せずに版だけ報告します。ただし**それが見るのはディスク上のファイル**です。
+**ゲームが実際に動かしている版は、`world.bridge_status` にしか分かりません。**
+
+### 2. MCP クライアントの設定
 
 ```json
 {
   "mcpServers": {
-    "minecraft-bedrock": {
+    "minecraft": {
       "command": "node",
-      "args": ["C:/path/to/minecraft-bedrock-education-mcp/dist/server.js"]
+      "args": ["path/to/packages/server/dist/index.js"]
     }
   }
 }
 ```
 
-**Claude Desktop**: `%APPDATA%\Claude\claude_desktop_config.json` (Windows)
-その他のMCPクライアントについては各ドキュメントを参照してください。
+オプション（フラグでも環境変数でも）：
 
-## 利用可能ツール
+| フラグ | 環境変数 | 既定 | |
+|---|---|---|---|
+| `--port N` | `MINECRAFT_MCP_PORT` | 19131 | `/connect` の宛先 |
+| `--host H` | `MINECRAFT_MCP_HOST` | 全インタフェース | `127.0.0.1` で他機を拒否 |
+| `--no-encryption` | `MINECRAFT_MCP_NO_ENCRYPTION` | off | **下記** |
 
-### コアツール
-- `player` - プレイヤー管理（位置、アイテム、能力）
-- `agent` - エージェント制御（移動、回転、インベントリ）
-- `blocks` - ブロック操作（設置、削除、範囲塗りつぶし）
-- `world` - ワールド制御（時間、天気、ゲームルール）
-- `camera` - カメラ制御（視点、フェード、シネマティック）
-- `system` - スコアボード・UI表示
-- `minecraft_wiki` - Wiki検索
-- `sequence` - 複数ツール連携実行
+**暗号化はゲーム側の設定と合わせる必要があり、食い違っても何も言われません。**
+ゲームが暗号化を拒否する設定なら、`/connect` は通ったように見えて**何も返ってきません**。
+これは「誰も `/connect` していない」のと見分けが付きません。
+繋いだのに静かなときは、他を調べる前にこの設定を疑ってください。
 
-### 建築ツール（12種類）
-- `build_cube` - 立方体（中空/塗りつぶし）
-- `build_sphere` - 球体
-- `build_cylinder` - 円柱
-- `build_line` - 直線
-- `build_torus` - トーラス（ドーナツ）
-- `build_helix` - 螺旋
-- `build_ellipsoid` - 楕円体
-- `build_paraboloid` - 放物面
-- `build_hyperboloid` - 双曲面
-- `build_bezier` - ベジェ曲線
-- `build_rotate` - 回転変換
-- `build_transform` - 座標変換
+### 3. ゲーム内から接続する
 
-## 使用例
-
-### 基本的な使い方
-
-AIアシスタントに自然に話しかけるだけ：
+チャットを開いて：
 
 ```
-今いる座標を教えて
-→ プレイヤー位置を取得
-
-目の前にダイヤモンドブロックを置いて
-→ ブロック設置
-
-半径10のガラスドームを作って
-→ 球体建築（中空）
-
-らせん階段を石レンガで作って
-→ 螺旋建築
-
-近くにいる村人の数を教えて
-→ エンティティ検索
+/connect localhost:19131
 ```
 
-### 複雑な建築
+**これをするまで何も繋がりません。サーバ側からは繋げません。**
+読み取りツールは未接続でも登録されていて、呼ぶとこの行を返します
+（失敗ではなく案内なので、AIがそのまま人に伝えられます）。
+
+## ツール
+
+### 建てる
+
+| | |
+|---|---|
+| `build.cube` | 2つの角で箱を埋める |
+| `build.sphere` | 球。半径を3つ指定すれば楕円体 |
+| `build.cylinder` `build.cone` `build.torus` | 円柱・円錐・トーラス。`hollow` で1ブロック厚の殻 |
+| `build.revolution` | 放物面・双曲面など |
+| `build.line` `build.helix` `build.curve` | 直線・螺旋・ベジェ曲線 |
+| `build.layers` | **1ブロック1文字のグリッド** |
+| `build.clone_region` | 既にあるブロックを**向きを保ったまま**複製・移動 |
+
+すべて `/fill` にまとめて送ります（半径5の球は515ブロックが43本の fill、実測0.27秒）。
+`states` を渡せば**向きを指定して置けます**（北向きの階段など）。
+
+### 読む
+
+| | |
+|---|---|
+| `world.players` | 全員の位置。**ここから始めます** — 他の読み取りは全部「どこを見るか」を要求します |
+| `world.agent` | エージェントの位置。**召喚はしません** |
+| `world.bridge_status` | 繋がっているか／アドオンが入っているか／版は合っているか。**困ったらここ** |
+| `world.get_block` | 1ブロック（ブロック状態つき） |
+| `world.read_region` | 最大4096ブロックを層グリッドで |
+| `world.entities` | モブ・プレイヤー・落ちているアイテム |
+| `world.container` | チェストの中身 |
+| `world.load_area` ほか2つ | 離れた場所を読めるようにする。**ただし動き出すので、読み終えたら外すこと** |
+
+### 測る
+
+| | |
+|---|---|
+| `assess.symmetry` | 対称性。**どこが一致しなかったか**まで |
+| `assess.composition` | 寸法・床面積・空気の割合・使ったブロック |
+
+**どちらも点数を出しません。** 「128組中121組が一致、不一致はこの座標」を返します。
+点数は、鏡映に失敗した子と、わざと非対称に建てた子を同じ数字に潰します。
+直すべきなのは前者だけで、**違いはブロックにはなく、その子が何を意図したかにあります。**
+それは先生が聞けることで、道具にはできません。
+
+小6算数「対称な図形」、中1数学「平面図形の移動」、小6「角柱と円柱の体積」に対応しています。
+
+## 領域が「グリッド」で返る理由
+
+`world.read_region` はブロック名の配列ではなく、1文字1ブロックの層とパレットを返します：
 
 ```
-城を作りたいんだけど
-→ AIが自動的に複数ツールを組み合わせて建築
-
-橋をベジェ曲線で滑らかに作って
-→ ベジェ曲線ツールで自然な曲線の橋
-
-時間を夜にして、雨を降らせて
-→ ワールド制御（時間・天気）
+y = -34
+  .............
+  ......a......
+  ...aaaaaaa...
+  ..aaaaaaaaa..
+  .aaaaaaaaaaa.
 ```
 
-### エラー時の自動修正
+4096ブロックが4096文字になります。小さいのは結果で、**理由は「物の形どおりに並んでいる」こと**です。
+壁は同じ文字の連続として見えます。そして**同じ表記が `build.layers` に戻せます** —
+読んで、直したい文字を直して、送り返せます。
 
+予約文字が2つあり、**入れ替えてはいけません**：
+
+- **`.` は空気。** 見て、何も無かった。書くとそこを消します
+- **`?` は未読。** チャンクが読み込まれておらず、誰も見ていない。書くと**触りません**
+
+この対応があるので、**一部しか読めなかった領域をそのまま書き戻しても、見ていない場所は壊れません。**
+
+**グリッドはブロックIDだけを運び、状態は運びません。** 階段は `oak_stairs` として返り、
+書き戻すと既定の向きになります。向きが要る位置は `world.get_block` で読み、
+向きを保ったまま動かすなら `build.clone_region` を使ってください。
+
+## うまくいかないとき
+
+**まず `world.bridge_status`。** これだけは失敗しません（他が失敗したから呼ばれる道具なので）。
+3つを見分けます：
+
+| 返答 | 意味 |
+|---|---|
+| `connected: false` | 誰も `/connect` していない、または暗号化設定の食い違い |
+| `upToDate: false` | **ゲームが古いアドオンを動かしています。完全終了して開き直してください**（ワールド再読み込みでは足りません） |
+| どちらも正常 | 問題は要求の側です。失敗したツールが理由を言っています |
+
+**`negative` が返っても、たいてい正常です。** Bedrock のステータスコードは判定ではありません。
+`0個のブロックで満たしました` は負の値ですが「実行されて対象が0個だった」という意味で、
+`そのブロックは設置できません` は「既に同じブロックがある」です。
+**本当に置けたかは、読んで確かめてください。**
+
+## 開発
+
+```bash
+npm run verify    # ビルド、16スイート、幾何のゴールデン
 ```
-ユーザー: "daimond_block を置いて"
-システム: ❌ Unknown block: minecraft:daimond_block
-         💡 Use the minecraft_wiki tool to search for valid block IDs
 
-AI: Wikiで検索して正しいIDを確認します...
-    → 自動的に "diamond_block" を検索して修正
-```
+**Minecraft なしで全部通ります。** end-to-end テストはサーバを子プロセスで起動し、
+偽の Bedrock クライアントを実ソケットで繋いで、**MCP の呼び出しが本当に `fill` になること**を
+確かめます。
 
-## 技術仕様
+`tools/live-probe/` は実機でしか分からないことを測る治具です。接続を張ったままシナリオを
+差し替えられます — 実機セッションは貴重で、**誰かがゲームを起動して `/connect` を打つ必要がある**ためです。
 
-- **トークン最適化**: 大量データを自動圧縮（98%削減）
-- **エラー自動修正**: AIが間違いを検出して自動修正
-- **多言語対応**: 日本語/英語切り替え可能
-
-## 必要環境
-
-- **Node.js** 16以上
-- **Minecraft Bedrock Edition** または **Education Edition**
-- **チート有効**のワールド
-- **MCPクライアント**（Claude Desktopなど）
+設計判断の記録は [`design/`](design/) にあります。実測値と、**確かめずに書いて間違えた記録**も
+含めて残してあります。
 
 ## ライセンス
 
 MIT
-
-## 謝辞
-
-- [SocketBE](https://github.com/tutinoko2048/SocketBE) - Minecraft Bedrock WebSocket統合ライブラリ
-- [Model Context Protocol](https://modelcontextprotocol.io) - AI統合プロトコル仕様
-- [Anthropic](https://www.anthropic.com) - Claude AI及びMCP TypeScript SDK
-
-## 関連リンク
-
-- [公式MCP仕様](https://modelcontextprotocol.io)
-- [Socket-BE GitHub](https://github.com/tutinoko2048/SocketBE)
-- [Minecraft Wiki](https://minecraft.wiki)
-- [Glama MCP Servers](https://glama.ai/mcp/servers)

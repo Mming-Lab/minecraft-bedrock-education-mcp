@@ -3,7 +3,7 @@
 An MCP server that lets a model build in Minecraft Education — and, unlike its predecessor,
 look at what it built.
 
-Twenty tools: nine shapes, a layer grid, a region copier, seven for reading the world, and two for measuring what is there. The reading half is
+Twenty-three tools: nine shapes, a layer grid, a region copier, ten for reading the world, and two for measuring what is there. The reading half is
 the point. A tool that places blocks and cannot see them leaves a model guessing whether the
 tower landed where it meant, so it cannot correct itself; it can only build again and hope.
 
@@ -126,6 +126,7 @@ about a quarter of a second.
 | `world.read_region` | Up to 4096 blocks as a layer grid |
 | `world.entities` | Mobs, players, dropped items — the one thing no other route can answer |
 | `world.container` | What is in a chest |
+| `world.load_area` `world.unload_area` `world.loaded_areas` | Keep distant chunks loaded so they can be read at all — **and running, so remove them after** |
 
 ### Measuring
 

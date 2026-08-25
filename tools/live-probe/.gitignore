@@ -12,3 +12,5 @@ rerun.txt
 # reached the code. CI runs on Linux and never noticed.
 UsersTK*
 *AppDataLocalTemp*
+active-scenario.txt
+rerun.txt

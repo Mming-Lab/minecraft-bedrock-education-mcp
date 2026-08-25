@@ -68,7 +68,7 @@ export const assessSymmetryTool = (bridge: WorldBridge) =>
       'Use it for the symmetry topic in primary arithmetic, and for reflection and rotation in lower secondary: a build either matches itself across an axis or it does not, and this says which blocks disagree.',
       'It does NOT say whether the build is symmetric, and returns no score. 121 matching pairs out of 128 might be a careful job with one slip, or a deliberately asymmetric design — the blocks cannot tell you which, and the difference matters more than the number. Report the figures and the mismatch positions; let the teacher decide what they mean.',
       'A quarter turn only means anything on a square footprint; on anything else it comes back with applicable: false rather than a misleading zero.',
-      'Pairs where one side was in an unloaded chunk are counted separately as indeterminate, never as mismatches — a slow chunk load must not tell a child their work is lopsided. If indeterminatePairs is above zero, read the region again once the area is loaded.',
+      'Pairs where one side was in an unloaded chunk are counted separately as indeterminate, never as mismatches — a slow chunk load must not tell a child their work is lopsided. If indeterminatePairs is above zero, call world.load_area over the build and measure again, then world.unload_area.',
       'Block states are not compared, only ids. A mirrored staircase correctly faces the other way, so comparing facings would mark every properly mirrored roof as wrong.',
       'Do NOT use this to compare two students. It looks at one region, and comparing children by a number is not what it is for.',
     ].join(' '),
@@ -122,7 +122,7 @@ export const assessCompositionTool = (bridge: WorldBridge) =>
       'Report a build\'s dimensions, its footprint, how many blocks are solid, how much of the box is air, and how many of each kind of block it used.',
       'Use it for the volume topic — base area times height — and to check whether a build used the materials a lesson asked for.',
       'It does NOT say whether the build is hollow or solid: it reports the proportion that is air, because where the line falls between a hollow tower and a thick-walled one is a judgement about what was intended.',
-      'If part of the region was in an unloaded chunk, complete comes back false and the counts describe less than the whole box. Read it again once the area is loaded rather than reporting the numbers as they are.',
+      'If part of the region was in an unloaded chunk, complete comes back false and the counts describe less than the whole box. Call world.load_area over it and measure again rather than reporting partial numbers as though they were the answer.',
       'Do NOT use this to compare or rank students. It looks at one region.',
     ].join(' '),
     inputSchema: {

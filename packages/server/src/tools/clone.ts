@@ -61,7 +61,7 @@ export const buildCloneRegionTool = (runner: CommandRunner) =>
     description: [
       'Copy a box of blocks to somewhere else, or move it. Block states are kept — a staircase arrives facing the way it faced, measured on a real game.',
       'Use this whenever the thing being moved is more than plain blocks: stairs, doors, signs, anything with an orientation. It is also the only way to shift more than 4096 blocks, and the only one that happens in a single command, so nothing can change halfway through.',
-      'Both regions must be in loaded chunks. A copy to somewhere far from any player fails with "cannot access blocks outside the world" — that is about loading, not about the world edge, and it will bite long before the size limit does.',
+      'Both regions must be in loaded chunks. A copy to somewhere far from any player fails with "cannot access blocks outside the world" — that is about loading, not about the world edge, and it bites long before the size limit does. Use world.load_area over both ends first, and world.unload_area afterwards.',
       'Set clone_mode to "move" to take the blocks with you: the source is left as air. "force" allows the source and destination to overlap. "normal", the default, refuses an overlap rather than producing something half-copied.',
       'Set mask_mode to "masked" to copy only the solid blocks, leaving whatever is already at the destination showing through the gaps. "replace", the default, copies the air too.',
       'It canNOT rotate or mirror — Bedrock has no such option. For a quarter turn, read the region with world.read_region, transpose the rows yourself, and send the grid to build.layers; that loses block states, which is why it is not what this tool does.',

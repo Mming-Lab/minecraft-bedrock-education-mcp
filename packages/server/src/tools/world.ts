@@ -243,7 +243,7 @@ export const worldReadRegion = (bridge: WorldBridge) =>
       'Use this before building anywhere that might already have something in it, and after building to check what actually landed.',
       'The grid can be read the way the structure is shaped — a wall is a run of the same character — and it is the same notation you would use to describe what to build.',
       `The box may hold at most ${MAX_REGION_BLOCKS} blocks (16x16x16). Read a larger area in pieces.`,
-      'A "?" in the grid means the chunk was not loaded, so that block was never read. It is NOT air. Do not build into it without reading again once the area is loaded.',
+      'A "?" in the grid means the chunk was not loaded, so that block was never read. It is NOT air, and building into it is how a model destroys something it never saw. To make those chunks readable, call world.load_area over the region and read again — but a loaded area also *runs*, so remove it with world.unload_area when you are done.',
       'The grid carries block ids and NOT block states: a staircase comes back as "oak_stairs" with no facing, a door with no hinge or open flag. Reading a region and building it back somewhere else will straighten every stair and close every door.',
       'Where the state matters, read that position with world.get_block, which does return states. To move or copy something with its states intact, use build.clone_region — it never converts to a grid at all.',
       'Do NOT use this to read one block — world.get_block is one round trip and returns more.',

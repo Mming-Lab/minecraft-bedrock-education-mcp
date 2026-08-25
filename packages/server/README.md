@@ -3,7 +3,7 @@
 An MCP server that lets a model build in Minecraft Education — and, unlike its predecessor,
 look at what it built.
 
-Seventeen tools: nine shapes, a layer grid, and seven for reading the world. The reading half is
+Eighteen tools: nine shapes, a layer grid, a region copier, and seven for reading the world. The reading half is
 the point. A tool that places blocks and cannot see them leaves a model guessing whether the
 tower landed where it meant, so it cannot correct itself; it can only build again and hope.
 
@@ -24,13 +24,19 @@ Three steps, in this order. The middle one is the one people skip.
 
 ### 1. Install the add-on
 
+This step is done by a person, and mostly cannot be anything else — two of its three parts are
+things only someone at the keyboard can do. The script copies files; that is all it automates.
+
 ```bash
 npx -p @mming-lab/minecraft-bedrock-education-mcp mcp-bridge-install
 ```
 
-From a checkout of this repository, that is `node packages/server/addon/install.mjs`.
+From a checkout of this repository, that is `node packages/server/addon/install.mjs`. Copying
+the `addon` folder by hand into `development_behavior_packs` does the same thing; the script
+exists because it also reports what is already installed, and because it ends by telling you
+about the two steps below rather than saying "done".
 
-Then, and this is not optional:
+Then, and this is the part that gets skipped:
 
 - **Close Minecraft Education completely and open it again.** Pack folders are scanned when
   the game launches and at no other time. Reloading the world is not enough — the game keeps
@@ -104,6 +110,7 @@ with a failure, so the model can pass it on.
 | `build.revolution` | Paraboloid, hyperboloid and friends |
 | `build.line` `build.helix` `build.curve` | Lines, spirals, Bézier curves |
 | `build.layers` | **A grid of characters, one per block** |
+| `build.clone_region` | Copy or move blocks that already exist, **keeping their states** |
 
 Everything above packs into `/fill` commands — a radius-5 sphere is 515 blocks in 43 fills,
 about a quarter of a second.
@@ -148,6 +155,11 @@ Two characters are reserved and they are not interchangeable:
 That pairing is what makes a partial edit safe. A region that came back partly unread can be
 written straight back without clearing ground nobody has seen.
 
+**The grid carries ids, not block states.** A staircase reads back as `oak_stairs` with no
+facing, and writing it somewhere else puts it down facing the default direction. Read a
+position with `world.get_block` when the state matters, and move things that have states with
+`build.clone_region`, which never converts them to characters at all.
+
 ## When it does not work
 
 Ask `world.bridge_status` first. It answers rather than failing, because it is the tool you
@@ -167,7 +179,7 @@ actually in the world, read it.
 ## Development
 
 ```bash
-npm test          # build, then twelve suites
+npm test          # build, then thirteen suites
 npm run test:golden
 ```
 

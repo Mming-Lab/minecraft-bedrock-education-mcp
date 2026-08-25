@@ -141,7 +141,7 @@ AI: Let me search the wiki for the correct ID...
 
 ## License
 
-GPL-3.0
+MIT
 
 ## Acknowledgments
 

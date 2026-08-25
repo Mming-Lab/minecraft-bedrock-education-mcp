@@ -31,11 +31,11 @@
 
 import { z } from 'zod';
 import type { CommandRunner } from '../bridge/index.js';
-import { normalizeBlockId } from '../commands/index.js';
+import { formatBlock, normalizeBlockId, type BlockSpec } from '../commands/index.js';
 import { placeGroups, type BlockGroup } from '../execute/placer.js';
 import type { Position } from '../geometry/index.js';
 import { AIR_SYMBOL, UNKNOWN_SYMBOL } from '../world/layers.js';
-import { BlockCoordinate, defineTool, type AnyToolDefinition } from './types.js';
+import { BlockCoordinate, BlockWithStates, defineTool, type AnyToolDefinition } from './types.js';
 
 /**
  * The most cells a grid may describe.
@@ -54,7 +54,8 @@ export const buildLayersTool = (runner: CommandRunner) =>
       'Use this for anything a parameter cannot describe: rooms with doors and windows, asymmetric structures, lettering, patterns, or a small edit to something that is already there.',
       'The intended loop is read, change, send back: world.read_region a region, change the characters you want changed, and pass the result here unmodified. Its palette and layers go straight in.',
       '"." is air and will clear what is there. "?" means leave that position completely alone — so a region that was partly unread can be written back safely, and so a small change does not have to describe the whole area.',
-      'Every block is placed in its DEFAULT state. The grid has no way to say which way a stair faces or whether a door is open, so writing back a region you read will straighten every stair and shut every door. Use "?" to leave those positions untouched, or move the whole thing with build.clone_region, which keeps states.',
+      'A block given as a plain string is placed in its default state; give it as an object with states to choose which way it faces.',
+      'This matters when writing back something you read: world.read_region returns ids only, so a grid that came from a read carries no facings. Send it back whole and every stair straightens and every door shuts. Use "?" for the positions you are not changing — those are never rewritten, so they keep everything they had.',
       'Do NOT use this for spheres, cylinders, cones, tori or helices — build.sphere and the other shape tools compute those exactly, and a hand-sliced curve comes out lumpy.',
       'Do NOT use it for large plain volumes either: build.cube fills a box with two corners rather than thousands of characters.',
     ].join(' '),
@@ -63,10 +64,13 @@ export const buildLayersTool = (runner: CommandRunner) =>
         'The block at the first character of the first row of the bottom layer. Everything else is placed relative to it.'
       ),
       palette: z
-        .record(z.string(), z.string())
+        .record(z.string(), BlockWithStates)
         .describe(
-          'One character to one block id, e.g. { "a": "stone", "b": "oak_planks" }. ' +
-            '"." and "?" are reserved and any entry for them is ignored, so read_region\'s palette can be passed through as it is.'
+          'One character to one block, e.g. { "a": "stone", "b": "oak_planks" }. ' +
+            'For a block that faces a direction, give an object instead: ' +
+            '{ "c": { "id": "oak_stairs", "states": { "weirdo_direction": 2 } } }. ' +
+            'Two entries for the same block with different states are two different characters, which is how a roof gets both slopes. ' +
+            '"." and "?" are reserved and any entry for them is ignored, so read_region\'s palette — which is all plain strings — passes straight through.'
         ),
       layers: z
         .array(
@@ -137,16 +141,23 @@ export const buildLayersTool = (runner: CommandRunner) =>
 
       // Reserved characters never reach the palette lookup, so an entry for them - which
       // read_region's palette has for `?` - is ignored rather than validated as a block id.
-      const blockFor = new Map<string, string>();
-      for (const [symbol, name] of Object.entries(palette)) {
+      const blockFor = new Map<string, BlockSpec>();
+      for (const [symbol, entry] of Object.entries(palette)) {
         if (symbol === AIR_SYMBOL || symbol === UNKNOWN_SYMBOL) continue;
         if (symbol.length !== 1) {
           throw new Error(`palette key ${JSON.stringify(symbol)} is not a single character`);
         }
-        blockFor.set(symbol, normalizeBlockId(name, `palette[${JSON.stringify(symbol)}]`));
+        const where = `palette[${JSON.stringify(symbol)}]`;
+        const spec = typeof entry === 'string' ? { id: entry } : entry;
+        blockFor.set(symbol, {
+          id: normalizeBlockId(spec.id, where),
+          ...(spec.states === undefined ? {} : { states: spec.states }),
+        });
       }
 
-      const byBlock = new Map<string, Position[]>();
+      // Keyed by the command form rather than by the id, so two entries for the same block
+      // with different states become two fills rather than one wrong one.
+      const byBlock = new Map<string, { block: BlockSpec; positions: Position[] }>();
       let untouched = 0;
 
       layers.forEach((layer, y) => {
@@ -156,21 +167,22 @@ export const buildLayersTool = (runner: CommandRunner) =>
               untouched++;
               return;
             }
-            const block = symbol === AIR_SYMBOL ? 'minecraft:air' : blockFor.get(symbol);
+            const block = symbol === AIR_SYMBOL ? { id: 'minecraft:air' } : blockFor.get(symbol);
             if (block === undefined) {
               throw new Error(
                 `layer ${y}, row ${z}, column ${x} is ${JSON.stringify(symbol)}, which the palette does not name. ` +
                   `Add it to the palette, or use "." for air or "?" to leave that block alone.`
               );
             }
-            const positions = byBlock.get(block) ?? [];
-            positions.push({ x: origin.x + x, y: origin.y + y, z: origin.z + z });
-            byBlock.set(block, positions);
+            const key = formatBlock(block);
+            const group = byBlock.get(key) ?? { block, positions: [] };
+            group.positions.push({ x: origin.x + x, y: origin.y + y, z: origin.z + z });
+            byBlock.set(key, group);
           });
         });
       });
 
-      const groups: BlockGroup[] = [...byBlock.entries()].map(([block, positions]) => ({ block, positions }));
+      const groups: BlockGroup[] = [...byBlock.values()];
       const blockCount = groups.reduce((total, group) => total + group.positions.length, 0);
       if (blockCount === 0) {
         throw new Error('every position in the grid is "?", so there is nothing to build');
@@ -186,7 +198,7 @@ export const buildLayersTool = (runner: CommandRunner) =>
           max: { x: origin.x + width - 1, y: origin.y + height - 1, z: origin.z + depth - 1 },
         },
         kinds: groups
-          .map((group) => ({ block: String(group.block), count: group.positions.length }))
+          .map((group) => ({ block: formatBlock(group.block), count: group.positions.length }))
           .sort((a, b) => b.count - a.count || (a.block < b.block ? -1 : 1)),
         commandCount: report.commandCount,
         unsent: report.unsent,

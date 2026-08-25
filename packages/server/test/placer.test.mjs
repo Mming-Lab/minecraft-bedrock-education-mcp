@@ -168,6 +168,23 @@ await test('build.cube actually sends a fill', async () => {
   assert.match(runner.sent[0], /^fill /);
 });
 
+await test('a shape tool can place a block facing a direction', async () => {
+  // Until this was wired, no tool on the surface could set a block state: BlockStates was
+  // defined and unused, the command layer supported it, and nothing connected the two. "Build
+  // a roof out of stairs facing north" was not expressible.
+  const runner = fakeRunner();
+  const tools = new Map(toolsFor(offlineBridge, runner).map((tool) => [tool.name, tool]));
+  await tools.get('build.cube').handler({
+    corner1: { x: 0, y: 64, z: 0 },
+    corner2: { x: 1, y: 64, z: 0 },
+    block: 'oak_stairs',
+    states: { weirdo_direction: 2 },
+  });
+
+  assert.equal(runner.sent.length, 1);
+  assert.match(runner.sent[0], /minecraft:oak_stairs \["weirdo_direction"=2\]/);
+});
+
 await test('the result does not carry two thousand coordinates back to the model', async () => {
   const runner = fakeRunner();
   const tools = new Map(toolsFor(offlineBridge, runner).map((tool) => [tool.name, tool]));

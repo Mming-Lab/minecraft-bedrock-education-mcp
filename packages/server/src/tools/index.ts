@@ -12,8 +12,8 @@ import { layerTools } from './layers.js';
 import { playerTools } from './players.js';
 import { cloneTools } from './clone.js';
 import { assessTools } from './assess.js';
-import { BuildOutcome, type AnyToolDefinition, type PlannedBuild } from './types.js';
-import { placeBlocks } from '../execute/placer.js';
+import { BlockStates, BuildOutcome, type AnyToolDefinition, type PlannedBuild } from './types.js';
+import { placeGroups } from '../execute/placer.js';
 import type { CommandRunner } from '../bridge/index.js';
 
 /**
@@ -31,10 +31,19 @@ import type { CommandRunner } from '../bridge/index.js';
 function building(tool: AnyToolDefinition, runner: CommandRunner): AnyToolDefinition {
   return {
     ...tool,
+    // Every shape gains the same optional states. Added here rather than in nine separate
+    // definitions so that a tool cannot be written that quietly lacks it - the same reason
+    // placing lives here rather than in each shape.
+    inputSchema: { ...tool.inputSchema, states: BlockStates.optional() },
     outputSchema: BuildOutcome.shape,
     handler: async (args: never) => {
       const plan = tool.handler(args) as PlannedBuild;
-      const report = await placeBlocks(runner, plan.positions, plan.block);
+      // The states ride alongside the id rather than inside it. `normalizeBlockId` rejects an
+      // id containing '[', so a caller who tried to splice them in would be refused - and a
+      // tool that emitted that form would be teaching the shape its own validator forbids.
+      const { states } = args as unknown as { states?: Record<string, string | number | boolean> };
+      const block = states === undefined ? plan.block : { id: plan.block, states };
+      const report = await placeGroups(runner, [{ block, positions: plan.positions }]);
       // `positions` is deliberately dropped: two thousand coordinates is not an answer to
       // "build me a sphere", and the model has world.read_region when it wants the blocks.
       const { positions: _positions, ...summary } = plan;

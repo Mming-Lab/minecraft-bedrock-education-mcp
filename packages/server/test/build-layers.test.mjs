@@ -204,6 +204,46 @@ await test("read_region's output goes back in unchanged", async () => {
   assert.equal(result.kinds.find((k) => k.block === 'minecraft:stone').count, 5);
 });
 
+await test('a palette entry with states reaches the command', async () => {
+  // The gap that made "place a staircase facing north" impossible: BlockStates existed,
+  // formatBlockStates existed, /fill accepted them, and no tool was wired to any of it.
+  const runner = fakeRunner();
+  await layersTool(runner).handler({
+    origin: ORIGIN,
+    palette: { c: { id: 'oak_stairs', states: { weirdo_direction: 2, upside_down_bit: false } } },
+    layers: [{ rows: ['c'] }],
+  });
+
+  // Bedrock's own spelling: a separate argument with quoted names, never spliced into the id -
+  // normalizeBlockId rejects an id containing '[' for exactly that reason, so emitting that
+  // form would have taught a model the shape this server's own validator forbids.
+  // States come out sorted, not in the order they were written: the same grid has to produce
+  // the same command every time, or the corpus test would churn on argument order alone.
+  assert.equal(
+    runner.sent[0],
+    'fill 10 64 20 10 64 20 minecraft:oak_stairs ["upside_down_bit"=false,"weirdo_direction"=2] replace'
+  );
+});
+
+await test('the same block with two facings is two fills, not one', async () => {
+  // A gable roof: both slopes are oak_stairs, and packing them into one box would give the
+  // whole roof one direction.
+  const runner = fakeRunner();
+  const result = await layersTool(runner).handler({
+    origin: ORIGIN,
+    palette: {
+      c: { id: 'oak_stairs', states: { weirdo_direction: 0 } },
+      d: { id: 'oak_stairs', states: { weirdo_direction: 1 } },
+    },
+    layers: [{ rows: ['cd'] }],
+  });
+
+  assert.equal(runner.sent.length, 2, 'two facings were packed into one fill');
+  assert.equal(result.kinds.length, 2, 'the report should tell them apart too');
+  assert.ok(runner.sent.some((c) => c.includes('"weirdo_direction"=0')));
+  assert.ok(runner.sent.some((c) => c.includes('"weirdo_direction"=1')));
+});
+
 await test('with nothing connected it says how to connect', async () => {
   await assert.rejects(
     async () =>

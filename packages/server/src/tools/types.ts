@@ -54,10 +54,39 @@ export const BlockId = z
   )
   .describe("Block identifier. The 'minecraft:' prefix is optional.");
 
-/** Block states are structured rather than spliced into the id, for the same reason. */
+/**
+ * Block states are structured rather than spliced into the id, for the same reason.
+ *
+ * Namespaced names are accepted because the game returns them: a chest reads back with both
+ * `facing_direction` and `minecraft:cardinal_direction`, measured on hardware. Rejecting the
+ * second would mean a state read from `world.get_block` could not be written back.
+ */
 export const BlockStates = z
-  .record(z.string().regex(/^[a-z0-9_]+$/), z.union([z.string(), z.number(), z.boolean()]))
-  .describe("Block states, e.g. { facing: 'north', open: true }. Omit unless the block needs them.");
+  .record(z.string().regex(/^(?:[a-z0-9_]+:)?[a-z0-9_]+$/), z.union([z.string(), z.number(), z.boolean()]))
+  .describe(
+    "Block states, e.g. { weirdo_direction: 2, upside_down_bit: false } for a staircase. " +
+      'Omit unless the block needs them; every block has a default. ' +
+      'Read the names for a block you can see with world.get_block, which returns them.'
+  );
+
+/**
+ * A block, optionally with the states that decide which way it faces.
+ *
+ * Writing takes states and reading a whole region does not, which looks lopsided until you
+ * see what each side is for. Reading has to cover whatever the world happens to contain -
+ * `liquid_depth` on every water block, `wall_connection_type_*` on every fence post - and
+ * carrying that in a layer grid makes regions unreadable: a cobblestone wall serialises to
+ * about 193 characters, two fit in a chat line, and a 16-cubed read is 2048 lines. Writing
+ * covers only what the author chose, which is two or three variants of one staircase, and it
+ * travels as an argument rather than through the chat ceiling.
+ */
+export const BlockWithStates = z.union([
+  BlockId,
+  z.object({
+    id: BlockId,
+    states: BlockStates.optional(),
+  }),
+]);
 
 export const HollowFlag = z
   .boolean()

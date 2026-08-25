@@ -1,6 +1,7 @@
 {
   "name": "minecraft-bedrock-education-mcp",
   "version": "1.0.0",
+  "private": true,
   "description": "TypeScript-based MCP server for controlling Minecraft Bedrock Edition and Education Edition via WebSocket with hierarchical tools for player, agent, world, and building operations",
   "main": "dist/server.js",
   "repository": {

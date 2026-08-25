@@ -5,3 +5,10 @@ dump/
 dump-selftest/
 .socketbe/
 rerun.txt
+
+# Anything a probe copies out of a temp path. One of these got committed once, under a name
+# 179 characters long with the separators flattened out of it, and it made the repository
+# impossible to clone on Windows - checkout failed with "Filename too long" before anyone
+# reached the code. CI runs on Linux and never noticed.
+UsersTK*
+*AppDataLocalTemp*

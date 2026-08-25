@@ -40,13 +40,12 @@ This step is done by a person, and mostly cannot be anything else — two of its
 things only someone at the keyboard can do. The script copies files; that is all it automates.
 
 ```bash
-npx -p @mming-lab/minecraft-bedrock-education-mcp mcp-bridge-install
+node packages/server/addon/install.mjs
 ```
 
-From a checkout of this repository, that is `node packages/server/addon/install.mjs`. Copying
-the `addon` folder by hand into `development_behavior_packs` does the same thing; the script
-exists because it also reports what is already installed, and because it ends by telling you
-about the two steps below rather than saying "done".
+Copying the `addon` folder by hand into `development_behavior_packs` does the same thing; the
+script exists because it also reports what is already installed, and because it ends by telling
+you about the two steps below rather than saying "done".
 
 Then, and this is the part that gets skipped:
 
@@ -73,17 +72,6 @@ what it compares: files on disk. What the game is *running* can be older than bo
   }
 }
 ```
-
-Once the package is published, that becomes:
-
-```json
-{ "mcpServers": { "minecraft": {
-    "command": "npx",
-    "args": ["-y", "@mming-lab/minecraft-bedrock-education-mcp"] } } }
-```
-
-with no checkout and no build step — the add-on ships inside the package, which is why step 1
-works from `npx` too. It is not published yet, so the path above is what works today.
 
 Options, as flags or environment variables:
 

@@ -5,6 +5,7 @@ export * from './layers.js';
 export * from './players.js';
 export * from './clone.js';
 export * from './assess.js';
+export * from './area.js';
 
 import { buildTools } from './build.js';
 import { offlineBridge, worldTools, type WorldBridge } from './world.js';
@@ -12,6 +13,7 @@ import { layerTools } from './layers.js';
 import { playerTools } from './players.js';
 import { cloneTools } from './clone.js';
 import { assessTools } from './assess.js';
+import { areaTools } from './area.js';
 import { BlockStates, BuildOutcome, type AnyToolDefinition, type PlannedBuild } from './types.js';
 import { placeGroups } from '../execute/placer.js';
 import type { CommandRunner } from '../bridge/index.js';
@@ -89,6 +91,10 @@ export function toolsFor(bridge: WorldBridge, runner: CommandRunner = offlineRun
     // needs no coordinates, and every other one needs coordinates.
     ...playerTools(runner),
     ...worldTools(bridge),
+    // With the other world.* tools, not after the assess ones. Grouping by prefix is what
+    // makes tools/list cacheable, and the surface test enforces it - I had put these last
+    // because they change the world, which is a reason for the annotation, not for the order.
+    ...areaTools(runner),
     // After the reading tools, because measuring is what you do with a region once you can
     // read one.
     ...assessTools(bridge),

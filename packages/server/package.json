@@ -54,7 +54,7 @@
   "scripts": {
     "prepack": "npm run build",
     "build": "tsc -p .",
-    "test": "npm run build && node test/tools.test.mjs && node test/commands.test.mjs && node test/optimize.test.mjs && node test/placer.test.mjs && node test/build-layers.test.mjs && node test/clone.test.mjs && node test/assess.test.mjs && node test/world.test.mjs && node test/world-tools.test.mjs && node test/players.test.mjs && node test/bridge.test.mjs && node test/transport.test.mjs && node test/geometry.property.test.mjs && node test/server.test.mjs",
+    "test": "npm run build && node test/tools.test.mjs && node test/commands.test.mjs && node test/optimize.test.mjs && node test/placer.test.mjs && node test/build-layers.test.mjs && node test/clone.test.mjs && node test/assess.test.mjs && node test/area.test.mjs && node test/world.test.mjs && node test/world-tools.test.mjs && node test/players.test.mjs && node test/bridge.test.mjs && node test/transport.test.mjs && node test/geometry.property.test.mjs && node test/server.test.mjs",
     "test:golden": "node ../../tools/golden-extract/validate.mjs --geometry ./test/golden-adapter.mjs --math ./test/golden-adapter.mjs --optimizer ./dist/commands/optimize.js",
     "start": "node dist/index.js",
     "verify": "npm test && npm run test:golden"

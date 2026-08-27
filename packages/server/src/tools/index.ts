@@ -6,6 +6,7 @@ export * from './players.js';
 export * from './clone.js';
 export * from './assess.js';
 export * from './area.js';
+export * from './plan.js';
 
 import { buildTools } from './build.js';
 import { offlineBridge, worldTools, type WorldBridge } from './world.js';
@@ -14,7 +15,15 @@ import { playerTools } from './players.js';
 import { cloneTools } from './clone.js';
 import { assessTools } from './assess.js';
 import { areaTools } from './area.js';
-import { BlockStates, BuildOutcome, type AnyToolDefinition, type PlannedBuild } from './types.js';
+import { planTools } from './plan.js';
+import {
+  BlockStates,
+  BuildOutcome,
+  DryRunFlag,
+  type AnyToolDefinition,
+  type PlannedBuild,
+} from './types.js';
+import { storePlan } from '../plan/store.js';
 import { placeGroups } from '../execute/placer.js';
 import type { CommandRunner } from '../bridge/index.js';
 
@@ -36,24 +45,40 @@ function building(tool: AnyToolDefinition, runner: CommandRunner): AnyToolDefini
     // Every shape gains the same optional states. Added here rather than in nine separate
     // definitions so that a tool cannot be written that quietly lacks it - the same reason
     // placing lives here rather than in each shape.
-    inputSchema: { ...tool.inputSchema, states: BlockStates.optional() },
+    inputSchema: { ...tool.inputSchema, states: BlockStates.optional(), dryRun: DryRunFlag.optional() },
     outputSchema: BuildOutcome.shape,
     handler: async (args: never) => {
       const plan = tool.handler(args) as PlannedBuild;
       // The states ride alongside the id rather than inside it. `normalizeBlockId` rejects an
       // id containing '[', so a caller who tried to splice them in would be refused - and a
       // tool that emitted that form would be teaching the shape its own validator forbids.
-      const { states } = args as unknown as { states?: Record<string, string | number | boolean> };
+      const { states, dryRun } = args as unknown as {
+        states?: Record<string, string | number | boolean>;
+        dryRun?: boolean;
+      };
       const block = states === undefined ? plan.block : { id: plan.block, states };
-      const report = await placeGroups(runner, [{ block, positions: plan.positions }]);
-      // `positions` is deliberately dropped: two thousand coordinates is not an answer to
-      // "build me a sphere", and the model has world.read_region when it wants the blocks.
+
+      // Kept, not returned. Two thousand coordinates is not an answer to "build me a sphere",
+      // but the server is the only thing that knows them and dropping them is what left it
+      // unable to answer any later question about the shape - including "draw it".
+      const planId = storePlan(plan.positions, tool.name, plan.block);
       const { positions: _positions, ...summary } = plan;
+
+      if (dryRun === true) {
+        // Nothing reaches the game. The point is plan.preview: a picture costs milliseconds
+        // and a read of the same region costs minutes, so the cheap look has to come first or
+        // it is not a loop a model can afford to run.
+        return { ...summary, planId, commandCount: 0, unsent: [], negative: [], placed: false };
+      }
+
+      const report = await placeGroups(runner, [{ block, positions: plan.positions }]);
       return {
         ...summary,
+        planId,
         commandCount: report.commandCount,
         unsent: report.unsent,
         negative: report.negative,
+        placed: true,
       };
     },
   };
@@ -98,6 +123,9 @@ export function toolsFor(bridge: WorldBridge, runner: CommandRunner = offlineRun
     // After the reading tools, because measuring is what you do with a region once you can
     // read one.
     ...assessTools(bridge),
+    // Last, and grouped like the rest. Drawing a plan is the one thing here that never talks
+    // to the game at all, so it sits at the end rather than interleaved with the tools that do.
+    ...planTools(),
   ];
 }
 

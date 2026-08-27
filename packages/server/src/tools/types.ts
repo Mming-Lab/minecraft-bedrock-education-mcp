@@ -148,7 +148,30 @@ export const BuildOutcome = BuildResult.extend({
         'means nothing matched, and "cannot be placed" means the block was already there. ' +
         'To find out whether the shape is actually in the world, read it with world.read_region.'
     ),
+  planId: z
+    .string()
+    .describe(
+      'Handle for the positions this shape covers, kept on the server. Pass it to plan.preview ' +
+        'to see the shape drawn. It stays valid for a while and then ages out; build again to get a new one.'
+    ),
+  placed: z
+    .boolean()
+    .describe('False when dryRun was set, meaning nothing was sent to the game.'),
 });
+
+/**
+ * Work the shape out and keep it, but do not build it.
+ *
+ * Separate from the shape parameters because it is the same question for every shape, and
+ * because the answer changes what the call *is*: with it set, nothing reaches the world.
+ */
+export const DryRunFlag = z
+  .boolean()
+  .describe(
+    'Work out the shape and keep it for plan.preview, but place nothing. Use this to look ' +
+      'before building — a picture costs milliseconds, and reading the same region back out ' +
+      'of the game costs minutes.'
+  );
 
 /**
  * Turns a computed position list into the summary above.
@@ -240,4 +263,25 @@ export function defineTool<Input extends ToolSchemaShape, Output extends ToolSch
   definition: ToolDefinition<Input, Output>
 ): ToolDefinition<Input, Output> {
   return definition;
+}
+
+/**
+ * Where a tool hangs an image on its result.
+ *
+ * A symbol rather than a field because the result is serialised twice on the way out - once
+ * as the JSON a model reads, once as `structuredContent` - and `JSON.stringify` skips symbol
+ * keys. A base64 PNG in either of those would be tens of kilobytes of noise in the model's
+ * context, which is the opposite of what drawing the plan is for.
+ */
+export const IMAGE_CONTENT = Symbol.for('mcp.imageContent');
+
+export interface ImageAttachment {
+  readonly data: string;
+  readonly mimeType: string;
+}
+
+/** Reads the attachment off a handler's result, if it hung one there. */
+export function imageAttachment(result: unknown): ImageAttachment | undefined {
+  if (typeof result !== 'object' || result === null) return undefined;
+  return (result as Record<symbol, ImageAttachment | undefined>)[IMAGE_CONTENT];
 }

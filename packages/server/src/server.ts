@@ -8,7 +8,7 @@
 
 import { McpServer } from '@modelcontextprotocol/server';
 import { z } from 'zod';
-import { allTools, offlineBridge, offlineRunner, toolsFor, type WorldBridge } from './tools/index.js';
+import { allTools, imageAttachment, offlineBridge, offlineRunner, toolsFor, type WorldBridge } from './tools/index.js';
 import type { CommandRunner } from './bridge/index.js';
 import { InvalidArgumentError } from './geometry/index.js';
 
@@ -36,8 +36,15 @@ function toCallback(handler: (args: never) => unknown) {
   return async (args: unknown) => {
     try {
       const result = await handler(args as never);
+      // A tool may hang a picture on its result. The spec puts images in `content` and not in
+      // `structuredContent`, which suits: the base64 never enters the JSON the model reads,
+      // because it is on a symbol key and `JSON.stringify` skips those.
+      const image = imageAttachment(result);
+      const text = { type: 'text' as const, text: JSON.stringify(result, null, 2) };
       return {
-        content: [{ type: 'text' as const, text: JSON.stringify(result, null, 2) }],
+        content: image
+          ? [{ type: 'image' as const, data: image.data, mimeType: image.mimeType }, text]
+          : [text],
         structuredContent: result as Record<string, unknown>,
       };
     } catch (error) {

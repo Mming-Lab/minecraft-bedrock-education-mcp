@@ -7,6 +7,7 @@ export * from './clone.js';
 export * from './assess.js';
 export * from './area.js';
 export * from './plan.js';
+export * from './rotate.js';
 
 import { buildTools } from './build.js';
 import { offlineBridge, worldTools, type WorldBridge } from './world.js';
@@ -16,6 +17,7 @@ import { cloneTools } from './clone.js';
 import { assessTools } from './assess.js';
 import { areaTools } from './area.js';
 import { planTools } from './plan.js';
+import { rotateTools } from './rotate.js';
 import {
   BlockStates,
   BuildOutcome,
@@ -112,6 +114,9 @@ export function toolsFor(bridge: WorldBridge, runner: CommandRunner = offlineRun
     ...buildTools.map((tool) => building(tool as AnyToolDefinition, runner)),
     ...layerTools(runner),
     ...cloneTools(runner),
+    // With the other build.* tools: it places blocks, and prefix grouping is what makes
+    // tools/list cacheable.
+    ...rotateTools(runner),
     // Where the players are comes before what is around them: it is the only reading tool that
     // needs no coordinates, and every other one needs coordinates.
     ...playerTools(runner),

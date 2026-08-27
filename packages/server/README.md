@@ -3,7 +3,7 @@
 An MCP server that lets a model build in Minecraft Education — and, unlike its predecessor,
 look at what it built.
 
-Twenty-four tools: ten shapes, a layer grid, a region copier, ten for reading the world, and two for measuring what is there. The reading half is
+Twenty-six tools: ten shapes, a layer grid, a region copier, a rotation, ten for reading the world, two for measuring what is there, and one that draws a plan before it is built. The reading half is
 the point. A tool that places blocks and cannot see them leaves a model guessing whether the
 tower landed where it meant, so it cannot correct itself; it can only build again and hope.
 
@@ -109,9 +109,17 @@ with a failure, so the model can pass it on.
 | `build.line` `build.helix` `build.curve` | Lines, spirals, Bézier curves |
 | `build.layers` | **A grid of characters, one per block** |
 | `build.clone_region` | Copy or move blocks that already exist, **keeping their states** |
+| `build.rotate` | **Place a plan turned about a point.** The only way to put a surface at an angle to the world — right angles are exact, other angles round and can leave gaps |
 
 Everything above packs into `/fill` commands — a radius-5 sphere is 515 blocks in 43 fills,
 about a quarter of a second.
+
+
+### Looking before building
+
+| | |
+|---|---|
+| `plan.preview` | **Draw a shape as a picture without placing it.** Set `dryRun` on any build call, then draw the plan it returns. A 137,000-block sphere is a 2.4KB image in 50ms; reading the same region out of the game is about five minutes |
 
 ### Reading
 
@@ -191,7 +199,7 @@ actually in the world, read it.
 ## Development
 
 ```bash
-npm run verify    # build, seventeen suites, and the geometry goldens
+npm run verify    # build, nineteen suites, and the geometry goldens
 ```
 
 Everything runs without Minecraft. The end-to-end test spawns the server as a child process

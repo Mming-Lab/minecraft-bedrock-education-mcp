@@ -113,6 +113,48 @@ export const buildCylinder = defineTool({
     ),
 });
 
+export const buildPrism = defineTool({
+  name: 'build.prism',
+  title: 'Prism',
+  description: [
+    'Push a polygon along an axis. Give the corners of the cross-section and how far to extrude it.',
+    'This is the shape for the parts of a building that are neither boxes nor round: a gable roof is a triangle extruded sideways, a hexagonal tower is a hexagon extruded upwards, an L-shaped floor plan is an L.',
+    'crossSection is relative to base, in the plane across the extrusion axis. With the default "y" axis, u runs east and v runs south — the same directions as a layer grid row, so a shape sketched as a grid can be traced as corners instead.',
+    'Corners are joined in the order given and the last joins back to the first, so order decides the shape: the same four corners in a different order give a bow tie rather than a square.',
+    'Do NOT use this for a box — build.cube takes two corners and is simpler. Do NOT use it for anything round: build.cylinder and build.cone compute circles exactly, and a polygon with enough corners to look round is both longer to write and lumpier.',
+    'Hollow gives walls with both ends closed, like build.cylinder — a room, not a tube.',
+  ].join(' '),
+  inputSchema: {
+    base: BlockCoordinate.describe(
+      'Where the cross-section sits. Corner offsets are measured from here, and the extrusion starts here.'
+    ),
+    crossSection: z
+      .array(
+        z.object({
+          u: z.number().int().min(-64).max(64),
+          v: z.number().int().min(-64).max(64),
+        })
+      )
+      .min(3)
+      .max(32)
+      .describe(
+        'Corners of the polygon, relative to base. At least 3. For the "y" axis, u is east and v is south.'
+      ),
+    height: z.number().int().min(1).max(384).describe('How many layers to extrude. 1 gives a flat slab.'),
+    axis: AxisSchema.optional(),
+    block: BlockId,
+    hollow: HollowFlag.optional(),
+  },
+  outputSchema: BuildResult.shape,
+  annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: true },
+  handler: ({ base, crossSection, height, axis, block, hollow }) =>
+    summariseBuild(
+      geometry.prism(base, crossSection, height, axis ?? 'y', hollow ?? false),
+      block,
+      hollow ?? false
+    ),
+});
+
 export const buildCone = defineTool({
   name: 'build.cone',
   title: 'Cone',
@@ -298,6 +340,7 @@ export const buildTools = [
   buildCube,
   buildSphere,
   buildCylinder,
+  buildPrism,
   buildCone,
   buildTorus,
   buildRevolution,

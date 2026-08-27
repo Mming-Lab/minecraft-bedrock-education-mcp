@@ -517,3 +517,151 @@ export function bezier(
   }
   return out.toArray();
 }
+
+/** One vertex of a prism's cross-section, in the plane perpendicular to the extrusion axis. */
+export interface CrossSectionVertex {
+  readonly u: number;
+  readonly v: number;
+}
+
+/**
+ * Walks the edges of a polygon a block at a time.
+ *
+ * The outline is rasterised separately from the interior, and always kept, because a
+ * point-in-polygon test is ambiguous exactly on the boundary - a vertex or a horizontal edge
+ * can fall either side of the crossing rule depending on which way the comparison is
+ * written. Tracing the edges first means the wall of a hollow prism cannot spring a leak at
+ * the one place a leak would be hardest to see.
+ */
+function traceEdge(
+  a: CrossSectionVertex,
+  b: CrossSectionVertex,
+  visit: (u: number, v: number) => void
+): void {
+  let u = a.u;
+  let v = a.v;
+  const du = Math.abs(b.u - a.u);
+  const dv = Math.abs(b.v - a.v);
+  const stepU = a.u < b.u ? 1 : -1;
+  const stepV = a.v < b.v ? 1 : -1;
+  let error = du - dv;
+
+  for (;;) {
+    visit(u, v);
+    if (u === b.u && v === b.v) return;
+    const doubled = 2 * error;
+    if (doubled > -dv) {
+      error -= dv;
+      u += stepU;
+    }
+    if (doubled < du) {
+      error += du;
+      v += stepV;
+    }
+  }
+}
+
+/**
+ * Even-odd crossing test, used for the interior only.
+ *
+ * Self-intersecting outlines are not rejected: the rule simply treats a doubly-wound region
+ * as outside, which is a definite answer rather than an error. Rejecting them would mean
+ * detecting the intersections, and a caller that wants a star polygon is not making a
+ * mistake.
+ */
+function isInsidePolygon(u: number, v: number, polygon: readonly CrossSectionVertex[]): boolean {
+  let inside = false;
+  for (let i = 0, j = polygon.length - 1; i < polygon.length; j = i++) {
+    const a = polygon[i]!;
+    const b = polygon[j]!;
+    if (a.v > v !== b.v > v) {
+      const crossing = a.u + ((v - a.v) / (b.v - a.v)) * (b.u - a.u);
+      if (u < crossing) inside = !inside;
+    }
+  }
+  return inside;
+}
+
+/**
+ * A polygon pushed along an axis.
+ *
+ * This is the shape the other eight do not cover. `build.cube` gives a box, `build.cylinder`
+ * and `build.cone` give round things, and between them sits everything a building is made
+ * of: a gable roof is a triangle extruded sideways, a hexagonal tower is a hexagon extruded
+ * upwards, an L-shaped floor plan is an L. D-14 recorded that "house", "tower" and "bridge"
+ * are not mathematical shapes and need decomposing; this is the first shape that decomposes
+ * them without going down to one character per block.
+ *
+ * `crossSection` is relative to `base`, in the plane across the extrusion axis. For the
+ * default 'y' axis, `u` runs east and `v` runs south, matching the layer grid.
+ *
+ * Hollow follows the same rule as the cylinder: walls only, with both end caps solid, so it
+ * is a room rather than a tube.
+ */
+export function prism(
+  base: Position,
+  crossSection: readonly CrossSectionVertex[],
+  height: number,
+  axis: Axis = 'y',
+  hollow = false
+): Position[] {
+  const b = toBlockPosition(base);
+  const h = requireLength('height', height);
+
+  if (crossSection.length < 3) {
+    throw new InvalidArgumentError(
+      'crossSection',
+      crossSection.length,
+      'needs at least 3 vertices to enclose anything'
+    );
+  }
+
+  const polygon = crossSection.map((vertex, index) => ({
+    u: Math.round(requireFiniteNumber(`crossSection[${index}].u`, vertex.u)),
+    v: Math.round(requireFiniteNumber(`crossSection[${index}].v`, vertex.v)),
+  }));
+
+  // The outline is the same on every layer, so it is traced once and reused. Interior cells
+  // likewise: extruding means every layer has identical cross-section.
+  const outline = new Set<string>();
+  for (let i = 0; i < polygon.length; i++) {
+    traceEdge(polygon[i]!, polygon[(i + 1) % polygon.length]!, (u, v) => {
+      outline.add(`${u},${v}`);
+    });
+  }
+
+  const uMin = Math.min(...polygon.map((p) => p.u));
+  const uMax = Math.max(...polygon.map((p) => p.u));
+  const vMin = Math.min(...polygon.map((p) => p.v));
+  const vMax = Math.max(...polygon.map((p) => p.v));
+
+  const interior: CrossSectionVertex[] = [];
+  for (let u = uMin; u <= uMax; u++) {
+    for (let v = vMin; v <= vMax; v++) {
+      if (outline.has(`${u},${v}`)) continue;
+      if (isInsidePolygon(u, v, polygon)) interior.push({ u, v });
+    }
+  }
+
+  const wall = [...outline].map((key) => {
+    const [u, v] = key.split(',');
+    return { u: Number(u), v: Number(v) };
+  });
+
+  const map = axisMapper(axis, b);
+  const out = new PositionCollector();
+
+  for (let along = 0; along < h; along++) {
+    const solidLayer = !hollow || along === 0 || along === h - 1;
+    for (const cell of wall) {
+      const [x, y, z] = map(along, cell.u, cell.v);
+      out.add(x, y, z);
+    }
+    if (!solidLayer) continue;
+    for (const cell of interior) {
+      const [x, y, z] = map(along, cell.u, cell.v);
+      out.add(x, y, z);
+    }
+  }
+  return out.toArray();
+}

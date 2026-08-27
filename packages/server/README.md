@@ -3,7 +3,7 @@
 An MCP server that lets a model build in Minecraft Education — and, unlike its predecessor,
 look at what it built.
 
-Twenty-three tools: nine shapes, a layer grid, a region copier, ten for reading the world, and two for measuring what is there. The reading half is
+Twenty-four tools: ten shapes, a layer grid, a region copier, ten for reading the world, and two for measuring what is there. The reading half is
 the point. A tool that places blocks and cannot see them leaves a model guessing whether the
 tower landed where it meant, so it cannot correct itself; it can only build again and hope.
 
@@ -104,6 +104,7 @@ with a failure, so the model can pass it on.
 | `build.cube` | Fill a box between two corners |
 | `build.sphere` | Sphere, or an ellipsoid with three radii |
 | `build.cylinder` `build.cone` `build.torus` | As named; `hollow` gives a one-block shell |
+| `build.prism` | **Push a polygon along an axis.** A gable roof is a triangle, a hexagonal tower a hexagon, an L-shaped plan an L |
 | `build.revolution` | Paraboloid, hyperboloid and friends |
 | `build.line` `build.helix` `build.curve` | Lines, spirals, Bézier curves |
 | `build.layers` | **A grid of characters, one per block** |
@@ -190,7 +191,7 @@ actually in the world, read it.
 ## Development
 
 ```bash
-npm run verify    # build, sixteen suites, and the geometry goldens
+npm run verify    # build, seventeen suites, and the geometry goldens
 ```
 
 Everything runs without Minecraft. The end-to-end test spawns the server as a child process

@@ -231,6 +231,7 @@ test('every build tool produces output matching its own schema', () => {
     'build.cube': { corner1: { x: 0, y: 0, z: 0 }, corner2: { x: 2, y: 2, z: 2 }, block: 'stone' },
     'build.sphere': { center: { x: 0, y: 64, z: 0 }, radius: 4, block: 'stone' },
     'build.cylinder': { center: { x: 0, y: 64, z: 0 }, radius: 3, height: 5, block: 'stone' },
+    'build.prism': { base: { x: 0, y: 64, z: 0 }, crossSection: [{ u: 0, v: 0 }, { u: 4, v: 0 }, { u: 2, v: 3 }], height: 5, block: 'stone' },
     'build.cone': { center: { x: 0, y: 64, z: 0 }, radius: 4, height: 6, block: 'stone' },
     'build.torus': { center: { x: 0, y: 64, z: 0 }, majorRadius: 6, minorRadius: 2, block: 'stone' },
     'build.revolution': { center: { x: 0, y: 64, z: 0 }, shape: 'paraboloid', height: 6, radius: 4, block: 'stone' },

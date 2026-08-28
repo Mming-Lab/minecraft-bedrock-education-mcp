@@ -61,7 +61,7 @@ await test('the block comes from the plan, so nothing has to be named again', as
   // was in the source, so `material` was required and everything came out one colour.
   resetPlans();
   const runner = fakeRunner();
-  const planId = storePlan([{ x: 3, y: 0, z: 0 }], 'build.cube', 'oak_planks');
+  const planId = storePlan([{ x: 3, y: 0, z: 0 }], 'build.cube', { id: 'oak_planks' });
   const result = await tool(runner).handler({ planId, origin: ORIGIN, axis: 'y', degrees: 90 });
   assert.equal(result.block, 'oak_planks');
   assert.ok(runner.sent.some((line) => line.includes('oak_planks')));
@@ -70,18 +70,71 @@ await test('the block comes from the plan, so nothing has to be named again', as
 await test('naming a block overrides the plan, for when that is what you want', async () => {
   resetPlans();
   const runner = fakeRunner();
-  const planId = storePlan([{ x: 3, y: 0, z: 0 }], 'build.cube', 'oak_planks');
+  const planId = storePlan([{ x: 3, y: 0, z: 0 }], 'build.cube', { id: 'oak_planks' });
   const result = await tool(runner).handler({
     planId, origin: ORIGIN, axis: 'y', degrees: 90, block: 'stone',
   });
   assert.equal(result.block, 'stone');
 });
 
+await test('a staircase keeps its facing through a turn, because the plan carries the states', async () => {
+  // This is the bug the first version had, and it was invisible: the plan stored the block id
+  // as a bare string, so the facing computed for the original build was sent to the game once
+  // and then dropped at exactly the point it would next be needed. Turning a staircase put it
+  // back down facing the default, and the only place that showed was in the world.
+  //
+  // D-15 decided the write side keeps states while the read side drops them. A plan is on the
+  // write side.
+  resetPlans();
+  const runner = fakeRunner();
+  const built = await toolsFor(offlineBridge, runner)
+    .find((t) => t.name === 'build.cube')
+    .handler({
+      corner1: { x: 5, y: 0, z: 0 },
+      corner2: { x: 5, y: 0, z: 0 },
+      block: 'oak_stairs',
+      states: { weirdo_direction: 2, upside_down_bit: true },
+      dryRun: true,
+    });
+
+  const turned = await tool(runner).handler({
+    planId: built.planId, origin: ORIGIN, axis: 'y', degrees: 90,
+  });
+  assert.equal(turned.block, 'oak_stairs');
+  const line = runner.sent.find((l) => l.includes('oak_stairs'));
+  assert.ok(line, 'no staircase reached the runner');
+  assert.match(line, /weirdo_direction/);
+  assert.match(line, /upside_down_bit/);
+});
+
+await test('naming a different block drops the old states rather than pasting them on', async () => {
+  // A facing that belonged to a staircase means nothing on stone, and carrying it over would
+  // produce a command the game refuses. Renaming the block is choosing a different thing.
+  resetPlans();
+  const runner = fakeRunner();
+  const built = await toolsFor(offlineBridge, runner)
+    .find((t) => t.name === 'build.cube')
+    .handler({
+      corner1: { x: 5, y: 0, z: 0 },
+      corner2: { x: 5, y: 0, z: 0 },
+      block: 'oak_stairs',
+      states: { weirdo_direction: 2 },
+      dryRun: true,
+    });
+
+  await tool(runner).handler({
+    planId: built.planId, origin: ORIGIN, axis: 'y', degrees: 90, block: 'stone',
+  });
+  const line = runner.sent.find((l) => l.includes('stone'));
+  assert.ok(line);
+  assert.ok(!line.includes('weirdo_direction'), 'the staircase facing was pasted onto stone');
+});
+
 await test('a right angle loses nothing and reports exact', async () => {
   resetPlans();
   const runner = fakeRunner();
   const slab = geometry.cuboid({ x: -5, y: 0, z: -5 }, { x: 5, y: 0, z: 5 });
-  const planId = storePlan(slab, 'build.cube', 'stone');
+  const planId = storePlan(slab, 'build.cube', { id: 'stone' });
   const result = await tool(runner).handler({ planId, origin: ORIGIN, axis: 'y', degrees: 90 });
   assert.equal(result.exact, true);
   assert.equal(result.lost, 0);
@@ -95,7 +148,7 @@ await test('four right angles bring a plan back to where it started', async () =
   const runner = fakeRunner();
   const shape = geometry.cuboid({ x: 2, y: 0, z: 1 }, { x: 6, y: 3, z: 2 });
   const key = (p) => `${p.x},${p.y},${p.z}`;
-  let current = storePlan(shape, 'build.cube', 'stone');
+  let current = storePlan(shape, 'build.cube', { id: 'stone' });
   for (let i = 0; i < 4; i++) {
     const r = await tool(runner).handler({ planId: current, origin: ORIGIN, axis: 'y', degrees: 90 });
     current = r.planId;
@@ -111,7 +164,7 @@ await test('a lossy turn says how many blocks it lost, rather than reporting a c
   resetPlans();
   const runner = fakeRunner();
   const slab = geometry.cuboid({ x: -10, y: 0, z: -10 }, { x: 10, y: 0, z: 10 });
-  const planId = storePlan(slab, 'build.cube', 'stone');
+  const planId = storePlan(slab, 'build.cube', { id: 'stone' });
   const result = await tool(runner).handler({ planId, origin: ORIGIN, axis: 'y', degrees: 45 });
   assert.equal(result.exact, false);
   assert.equal(result.sourceBlockCount, 441);
@@ -129,7 +182,7 @@ await test('the same turn on an arrangement loses nothing, which is the common c
     const t = (i * Math.PI) / 4;
     ring.push({ x: Math.round(9 * Math.cos(t)), y: 0, z: Math.round(9 * Math.sin(t)) });
   }
-  const planId = storePlan(ring, 'build.cube', 'stone');
+  const planId = storePlan(ring, 'build.cube', { id: 'stone' });
   const result = await tool(runner).handler({ planId, origin: ORIGIN, axis: 'y', degrees: 45 });
   assert.equal(result.lost, 0);
   assert.equal(result.blockCount, 8);
@@ -138,7 +191,7 @@ await test('the same turn on an arrangement loses nothing, which is the common c
 await test('the turned shape becomes a plan of its own, so it can be turned again', async () => {
   resetPlans();
   const runner = fakeRunner();
-  const planId = storePlan([{ x: 4, y: 0, z: 0 }], 'build.cube', 'stone');
+  const planId = storePlan([{ x: 4, y: 0, z: 0 }], 'build.cube', { id: 'stone' });
   const once = await tool(runner).handler({ planId, origin: ORIGIN, axis: 'y', degrees: 90 });
   assert.notEqual(once.planId, planId);
   assert.equal(once.sourcePlanId, planId);

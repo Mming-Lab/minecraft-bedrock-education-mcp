@@ -58,12 +58,16 @@ function building(tool: AnyToolDefinition, runner: CommandRunner): AnyToolDefini
         states?: Record<string, string | number | boolean>;
         dryRun?: boolean;
       };
-      const block = states === undefined ? plan.block : { id: plan.block, states };
+      const block = states === undefined ? { id: plan.block } : { id: plan.block, states };
 
       // Kept, not returned. Two thousand coordinates is not an answer to "build me a sphere",
       // but the server is the only thing that knows them and dropping them is what left it
       // unable to answer any later question about the shape - including "draw it".
-      const planId = storePlan(plan.positions, tool.name, plan.block);
+      //
+      // The states go in with it. Storing the bare id was the first shape of this and it meant
+      // a staircase kept as a plan and placed again came down facing the default - the states
+      // were computed, sent once, and dropped at the point they would next be needed.
+      const planId = storePlan(plan.positions, tool.name, block);
       const { positions: _positions, ...summary } = plan;
 
       if (dryRun === true) {

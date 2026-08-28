@@ -26,10 +26,24 @@
  * it, and a plan that has aged out says so rather than being silently redrawn from nothing.
  */
 
+import type { BlockSpec } from '../commands/index.js';
 import type { Position } from '../geometry/index.js';
 
-/** How many plans are kept at once. */
-export const MAX_PLANS = 16;
+/**
+ * How many plans are kept at once.
+ *
+ * Sixteen was the first number here and it was too low, for a reason that only shows up in
+ * use: `building()` stores a plan on *every* build, not only on a dry run. A tree built from
+ * forty-nine curves therefore evicts its own first thirty-three plans while it is still being
+ * built, and a model that then asked to draw the trunk would be told the plan had aged out -
+ * with nothing in the schema to warn it. The failure appears at N=17 and not at N=16, which is
+ * the worst shape a limit can have: the same call succeeds or fails depending on how much
+ * happened before it.
+ *
+ * The position budget below is the limit that actually protects memory. This one only stops
+ * thousands of tiny plans accumulating their own overhead, and it can be generous.
+ */
+export const MAX_PLANS = 256;
 
 /**
  * Total positions held across all plans.
@@ -46,7 +60,16 @@ export interface StoredPlan {
   readonly positions: readonly Position[];
   /** What made it, for the caller's benefit when a picture comes back and needs a caption. */
   readonly shape: string;
-  readonly block: string;
+  /**
+   * The block *and its states*, not just the id.
+   *
+   * Storing a bare string was the first shape of this and it was wrong. D-15 decided that the
+   * write side keeps states while the read side drops them, and a plan is on the write side:
+   * a staircase built with a facing, kept as a plan, and placed again through build.rotate
+   * would have come back down facing the default. The states were computed, sent to the game
+   * once, and then thrown away at the point where they would be needed again.
+   */
+  readonly block: BlockSpec;
 }
 
 interface Entry extends StoredPlan {
@@ -73,7 +96,7 @@ function evictOldest(): void {
   heldPositions -= oldest.positions.length;
 }
 
-export function storePlan(positions: readonly Position[], shape: string, block: string): string {
+export function storePlan(positions: readonly Position[], shape: string, block: BlockSpec): string {
   const planId = mintId();
   nextSequence++;
 

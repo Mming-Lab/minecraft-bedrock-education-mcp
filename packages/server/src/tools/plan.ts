@@ -88,7 +88,9 @@ export const planPreview = defineTool({
       planId,
       view: chosen,
       shape: plan.shape,
-      block: plan.block,
+      // The id alone. The picture is a silhouette with depth shading and does not draw block
+      // colours, so the states have nothing to say here - they matter when the plan is placed.
+      block: plan.block.id,
       blockCount: plan.positions.length,
       width: drawn.width,
       height: drawn.height,

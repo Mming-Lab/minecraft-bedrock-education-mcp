@@ -157,7 +157,7 @@ await test('the coordinates do not travel in the result', () => {
   // The reason they were dropped in the first place, and still the reason. Keeping them on
   // the server was the change; returning them would undo it.
   resetPlans();
-  const planId = storePlan([{ x: 1, y: 2, z: 3 }], 'build.cube', 'stone');
+  const planId = storePlan([{ x: 1, y: 2, z: 3 }], 'build.cube', { id: 'stone' });
   const drawn = tool('plan.preview').handler({ planId });
   const serialised = JSON.stringify(drawn);
   assert.ok(!serialised.includes('"positions"'));
@@ -175,7 +175,7 @@ await test('a planId that aged out says what to do about it', () => {
 await test('the store evicts rather than growing without limit', () => {
   resetPlans();
   const ids = [];
-  for (let i = 0; i < MAX_PLANS + 5; i++) ids.push(storePlan([{ x: i, y: 0, z: 0 }], 'build.cube', 'stone'));
+  for (let i = 0; i < MAX_PLANS + 5; i++) ids.push(storePlan([{ x: i, y: 0, z: 0 }], 'build.cube', { id: 'stone' }));
   assert.equal(planCount(), MAX_PLANS);
   assert.equal(getPlan(ids[0]), undefined, 'the oldest plan survived the limit');
   assert.ok(getPlan(ids[ids.length - 1]), 'the newest plan was evicted');

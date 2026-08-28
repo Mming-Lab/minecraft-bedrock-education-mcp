@@ -42,6 +42,7 @@
 import { z } from 'zod';
 
 import type { CommandRunner } from '../bridge/index.js';
+import type { BlockSpec } from '../commands/index.js';
 import { rotatePositions } from '../geometry/index.js';
 import { getPlan, storePlan } from '../plan/store.js';
 import { placeGroups } from '../execute/placer.js';
@@ -111,8 +112,17 @@ export const buildRotateTool = (runner: CommandRunner) =>
         throw new Error('the turned shape has no blocks left, which should not happen — the plan was empty');
       }
 
-      const chosen = block ?? source.block;
-      const placed = states === undefined ? chosen : { id: chosen, states };
+      // The plan carries its own block *and* states, so a staircase turned by a right angle
+      // keeps the facing it was built with. Naming a block here replaces the id and drops the
+      // plan's states with it, because a facing that belonged to oak_stairs means nothing on
+      // stone - the caller who renames the block is choosing a different thing entirely.
+      const chosen: BlockSpec =
+        block === undefined
+          ? source.block
+          : states === undefined
+            ? { id: block }
+            : { id: block, states };
+      const placed = states === undefined ? chosen : { id: chosen.id, states };
 
       const xs = turned.map((p: { x: number }) => p.x);
       const ys = turned.map((p: { y: number }) => p.y);
@@ -134,7 +144,7 @@ export const buildRotateTool = (runner: CommandRunner) =>
           min: { x: Math.min(...xs), y: Math.min(...ys), z: Math.min(...zs) },
           max: { x: Math.max(...xs), y: Math.max(...ys), z: Math.max(...zs) },
         },
-        block: chosen,
+        block: chosen.id,
         commandCount: report.commandCount,
         unsent: report.unsent,
         negative: report.negative,

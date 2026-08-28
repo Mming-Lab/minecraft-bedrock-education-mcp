@@ -285,3 +285,16 @@ export function imageAttachment(result: unknown): ImageAttachment | undefined {
   if (typeof result !== 'object' || result === null) return undefined;
   return (result as Record<symbol, ImageAttachment | undefined>)[IMAGE_CONTENT];
 }
+
+/**
+ * The same object with the attachment removed.
+ *
+ * `structuredContent` is validated against the output schema key by key, and a symbol key is
+ * not a string - so an object carrying one is refused by the SDK before it ever reaches the
+ * client. `JSON.stringify` skipping symbols is not the same as the object not having them.
+ */
+export function withoutAttachment<T>(result: T): T {
+  if (typeof result !== 'object' || result === null) return result;
+  const { [IMAGE_CONTENT]: _dropped, ...rest } = result as Record<symbol, unknown>;
+  return rest as T;
+}

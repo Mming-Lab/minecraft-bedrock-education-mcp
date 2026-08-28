@@ -312,6 +312,36 @@ try {
   await test('an unknown tool is a protocol error', async () => {
     await assert.rejects(client.callTool({ name: 'build.nonexistent', arguments: {} }));
   });
+
+  await test('a plan comes back as a picture, over a real client', async () => {
+    // plan.preview shipped passing its own unit tests and failing here, because those tests
+    // call the handler directly and this goes through the SDK. The image rides on a symbol key
+    // so that JSON.stringify skips it - which it does - but `structuredContent` was handed the
+    // same object, and the SDK validates that against the output schema key by key. A symbol
+    // key is not a string, and the call came back as a protocol error rather than a picture.
+    //
+    // The repo already had a name for this shape of mistake: unit tests pass, the real path is
+    // broken. This is the test that would have caught it.
+    const planned = await client.callTool({
+      name: 'build.sphere',
+      arguments: { center: { x: 40, y: 64, z: 40 }, radius: 3, block: 'stone', dryRun: true },
+    });
+    assert.ok(!planned.isError, `dryRun failed: ${JSON.stringify(planned.content)}`);
+    assert.equal(planned.structuredContent.placed, false);
+    const planId = planned.structuredContent.planId;
+    assert.ok(planId, 'no planId came back from a dry run');
+
+    const drawn = await client.callTool({ name: 'plan.preview', arguments: { planId } });
+    assert.ok(!drawn.isError, `preview failed: ${JSON.stringify(drawn.content)}`);
+
+    const image = drawn.content.find((block) => block.type === 'image');
+    assert.ok(image, 'no image block in the result');
+    assert.equal(image.mimeType, 'image/png');
+    // A real PNG, not an empty string that happens to type-check.
+    assert.ok(Buffer.from(image.data, 'base64').subarray(0, 4).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47])));
+    // ...and the base64 stayed out of the JSON the model reads.
+    assert.ok(!JSON.stringify(drawn.structuredContent).includes(image.data.slice(0, 40)));
+  });
 } finally {
   // The game first: closing the socket lets the server clear the per-world polling
   // interval before the process is asked to go.

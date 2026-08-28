@@ -8,7 +8,7 @@
 
 import { McpServer } from '@modelcontextprotocol/server';
 import { z } from 'zod';
-import { allTools, imageAttachment, offlineBridge, offlineRunner, toolsFor, type WorldBridge } from './tools/index.js';
+import { allTools, imageAttachment, withoutAttachment, offlineBridge, offlineRunner, toolsFor, type WorldBridge } from './tools/index.js';
 import type { CommandRunner } from './bridge/index.js';
 import { InvalidArgumentError } from './geometry/index.js';
 
@@ -35,11 +35,18 @@ function toCallback(handler: (args: never) => unknown) {
   // both kinds go through the same path rather than the surface splitting in two.
   return async (args: unknown) => {
     try {
-      const result = await handler(args as never);
-      // A tool may hang a picture on its result. The spec puts images in `content` and not in
-      // `structuredContent`, which suits: the base64 never enters the JSON the model reads,
-      // because it is on a symbol key and `JSON.stringify` skips those.
-      const image = imageAttachment(result);
+      const raw = await handler(args as never);
+      // A tool may hang a picture on its result, on a symbol key so that `JSON.stringify`
+      // skips it and the base64 never enters the JSON the model reads.
+      //
+      // `structuredContent` has to be stripped of it explicitly, though. The SDK validates
+      // that object against the output schema key by key, and a symbol key is not a string:
+      // the whole call came back as a protocol error rather than a picture. `JSON.stringify`
+      // skipping symbols is not the same as the object not having them, and the first version
+      // of this conflated the two - which the unit tests could not see, because they call the
+      // handler directly and never go through the SDK.
+      const image = imageAttachment(raw);
+      const result = image === undefined ? raw : withoutAttachment(raw);
       const text = { type: 'text' as const, text: JSON.stringify(result, null, 2) };
       return {
         content: image

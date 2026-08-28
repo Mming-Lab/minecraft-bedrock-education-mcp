@@ -15,7 +15,7 @@
 An MCP server that lets a model build in Minecraft Education — and, unlike its predecessor,
 look at what it built.
 
-Twenty-six tools: ten shapes, a layer grid, a region copier, a rotation, ten for reading the world, two for measuring what is there, and one that draws a plan before it is built. The reading half is
+Twenty-seven tools: ten shapes, a batch that places many of them at once, a layer grid, a region copier, a rotation, ten for reading the world, two for measuring what is there, and one that draws a plan before it is built. The reading half is
 the point. A tool that places blocks and cannot see them leaves a model guessing whether the
 tower landed where it meant, so it cannot correct itself; it can only build again and hope.
 
@@ -122,6 +122,7 @@ with a failure, so the model can pass it on.
 | `build.layers` | **A grid of characters, one per block** |
 | `build.clone_region` | Copy or move blocks that already exist, **keeping their states** |
 | `build.rotate` | **Place a plan turned about a point.** The only way to put a surface at an angle to the world — right angles are exact, other angles round and can leave gaps |
+| `build.batch` | **Many shapes in one call.** Measured: a tree built as 49 separate calls spent 98% of its 385 seconds on the calls, not the blocks. Overlaps between shapes are written once |
 
 Everything above packs into `/fill` commands — a radius-5 sphere is 515 blocks in 43 fills,
 about a quarter of a second.
@@ -211,7 +212,7 @@ actually in the world, read it.
 ## Development
 
 ```bash
-npm run verify    # build, nineteen suites, and the geometry goldens
+npm run verify    # build, twenty suites, and the geometry goldens
 ```
 
 Everything runs without Minecraft. The end-to-end test spawns the server as a child process

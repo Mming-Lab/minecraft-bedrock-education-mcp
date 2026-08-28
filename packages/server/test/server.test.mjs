@@ -313,6 +313,50 @@ try {
     await assert.rejects(client.callTool({ name: 'build.nonexistent', arguments: {} }));
   });
 
+  await test('a batch of shapes reaches the game as one set of fills', async () => {
+    // The whole point of the tool, checked where it actually happens. A discriminated union
+    // has to survive the SDK's own schema conversion, and the fills have to arrive - two
+    // things the unit tests cannot see, because they neither serialise nor connect.
+    const before = game.commands.length;
+    const result = await client.callTool({
+      name: 'build.batch',
+      arguments: {
+        shapes: [
+          { type: 'cube', corner1: { x: 60, y: 64, z: 60 }, corner2: { x: 62, y: 64, z: 62 }, block: 'stone' },
+          { type: 'sphere', center: { x: 70, y: 64, z: 60 }, radius: 2, block: 'oak_log' },
+          { type: 'curve', start: { x: 80, y: 64, z: 60 }, end: { x: 86, y: 70, z: 60 },
+            controlPoints: [{ x: 83, y: 64, z: 60 }], block: 'oak_log' },
+        ],
+      },
+    });
+
+    assert.ok(!result.isError, `batch failed: ${JSON.stringify(result.content)}`);
+    assert.equal(result.structuredContent.shapeCount, 3);
+    assert.equal(result.structuredContent.placed, true);
+
+    const sent = game.commands.slice(before);
+    assert.equal(sent.length, result.structuredContent.commandCount);
+    assert.ok(sent.every((c) => c.startsWith('fill ')));
+    // Both materials went, in one call.
+    assert.ok(sent.some((c) => c.includes('stone')));
+    assert.ok(sent.some((c) => c.includes('oak_log')));
+  });
+
+  await test('a bad entry in a batch names its index over the wire', async () => {
+    const result = await client.callTool({
+      name: 'build.batch',
+      arguments: {
+        shapes: [
+          { type: 'cube', corner1: { x: 0, y: 64, z: 0 }, corner2: { x: 1, y: 64, z: 1 }, block: 'stone' },
+          { type: 'revolution', center: { x: 0, y: 64, z: 0 }, shape: 'hyperboloid', height: 6, block: 'stone' },
+        ],
+      },
+    });
+    assert.ok(result.isError, 'a missing required argument should be a tool error');
+    const text = result.content.map((c) => c.text ?? '').join(' ');
+    assert.match(text, /shapes\[1\]/, 'the error does not say which entry was wrong');
+  });
+
   await test('a plan comes back as a picture, over a real client', async () => {
     // plan.preview shipped passing its own unit tests and failing here, because those tests
     // call the handler directly and this goes through the SDK. The image rides on a symbol key

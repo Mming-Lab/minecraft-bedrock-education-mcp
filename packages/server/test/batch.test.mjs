@@ -23,7 +23,7 @@
 import assert from 'node:assert/strict';
 import { z } from 'zod';
 
-import { toolsFor, offlineBridge, MAX_SHAPES } from '../dist/tools/index.js';
+import { toolsFor, offlineBridge, MAX_SHAPES, MAX_OVERWRITTEN_LISTED } from '../dist/tools/index.js';
 import { resetPlans, getPlan } from '../dist/plan/store.js';
 
 let passed = 0;
@@ -196,6 +196,70 @@ await test('the cap is stated in the schema rather than discovered', () => {
     type: 'cube', corner1: P(0, 0, 0), corner2: P(1, 0, 1), block: 'stone',
   }));
   assert.throws(() => schema.parse(many));
+});
+
+await test('an entry buried by a later one says so, by index', async () => {
+  // The case this exists for, measured on the tree: every total was correct and 220 logs were
+  // missing anyway, because the leaf balls were centred on the branch tips. Nothing in the
+  // result said which entries had lost them, and a caller with no second count of its own
+  // could not have found out.
+  resetPlans();
+  const result = await tool(fakeRunner()).handler({
+    shapes: [
+      { type: 'cube', corner1: P(0, 0, 0), corner2: P(0, 0, 0), block: 'oak_log' },
+      { type: 'cube', corner1: P(4, 0, 0), corner2: P(9, 0, 0), block: 'stone' },
+      { type: 'sphere', center: P(0, 0, 0), radius: 2, block: 'oak_leaves' },
+    ],
+  });
+  assert.equal(result.overwrittenCount, 1, 'only the first entry lost anything');
+  assert.deepEqual(result.overwritten, [{ index: 0, type: 'cube', claimed: 1, kept: 0 }]);
+  // The entry that kept everything is not in the list at all.
+  assert.ok(!result.overwritten.some((row) => row.index === 1));
+});
+
+await test('the entry that lost most is named first', async () => {
+  resetPlans();
+  const result = await tool(fakeRunner()).handler({
+    shapes: [
+      { type: 'cube', corner1: P(0, 0, 0), corner2: P(0, 0, 9), block: 'stone' },
+      { type: 'cube', corner1: P(4, 0, 0), corner2: P(4, 0, 9), block: 'stone' },
+      { type: 'cube', corner1: P(0, 0, 0), corner2: P(0, 0, 6), block: 'oak_log' },
+      { type: 'cube', corner1: P(4, 0, 0), corner2: P(4, 0, 1), block: 'oak_log' },
+    ],
+  });
+  assert.deepEqual(
+    result.overwritten.map((r) => [r.index, r.claimed, r.kept]),
+    [[0, 10, 3], [1, 10, 8]],
+    'seven lost is worse than two, whatever order the entries came in'
+  );
+});
+
+await test('a dry run reports the burial too, while it is still free to fix', async () => {
+  resetPlans();
+  const runner = fakeRunner();
+  const result = await tool(runner).handler({
+    shapes: [
+      { type: 'cube', corner1: P(0, 0, 0), corner2: P(0, 0, 0), block: 'oak_log' },
+      { type: 'sphere', center: P(0, 0, 0), radius: 2, block: 'oak_leaves' },
+    ],
+    dryRun: true,
+  });
+  assert.equal(runner.sent.length, 0);
+  assert.deepEqual(result.overwritten, [{ index: 0, type: 'cube', claimed: 1, kept: 0 }]);
+});
+
+await test('the naming is capped and the count is not', async () => {
+  // No silent truncation. A call where every entry lost something must not answer with a list
+  // longer than the request, and must not report the rest as if they had not happened.
+  resetPlans();
+  const losers = MAX_OVERWRITTEN_LISTED + 5;
+  const shapes = Array.from({ length: losers }, (_, i) => ({
+    type: 'cube', corner1: P(i, 0, 0), corner2: P(i, 0, 0), block: 'stone',
+  }));
+  shapes.push({ type: 'cube', corner1: P(0, 0, 0), corner2: P(losers - 1, 0, 0), block: 'oak_log' });
+  const result = await tool(fakeRunner()).handler({ shapes });
+  assert.equal(result.overwrittenCount, losers);
+  assert.equal(result.overwritten.length, MAX_OVERWRITTEN_LISTED);
 });
 
 console.log(`\n${passed} passed, ${failed} failed`);

@@ -122,7 +122,7 @@ with a failure, so the model can pass it on.
 | `build.layers` | **A grid of characters, one per block** |
 | `build.clone_region` | Copy or move blocks that already exist, **keeping their states** |
 | `build.rotate` | **Place a plan turned about a point.** The only way to put a surface at an angle to the world — right angles are exact, other angles round and can leave gaps |
-| `build.batch` | **Many shapes in one call.** Measured: a tree built as 49 separate calls spent 98% of its 385 seconds on the calls, not the blocks. Overlaps between shapes are written once |
+| `build.batch` | **Many shapes in one call.** The same tree, measured both ways: 49 calls took 385 seconds, one call took 64 — with *more* shapes in *fewer* fills, because a block two branches share is written once. It also names the entries a later one covered over, so a branch that turned into leaves says so instead of going quietly missing |
 
 Everything above packs into `/fill` commands — a radius-5 sphere is 515 blocks in 43 fills,
 about a quarter of a second.

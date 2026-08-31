@@ -30,7 +30,7 @@
   ],
   "dependencies": {
     "@modelcontextprotocol/server": "2.0.0",
-    "socket-be": "^2.6.0",
+    "socket-be": "git+https://github.com/Mming-Lab/SocketBE.git#makenode",
     "zod": "^4.2.0"
   },
   "devDependencies": {

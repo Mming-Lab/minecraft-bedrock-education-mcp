@@ -4,7 +4,7 @@
       "type": "stdio",
       "command": "node",
       "args": [
-        "./packages/server/dist/index.js",
+        "./dist/index.js",
         "--port",
         "19131",
         "--no-encryption",

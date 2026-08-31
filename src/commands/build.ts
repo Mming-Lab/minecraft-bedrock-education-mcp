@@ -5,7 +5,7 @@
  * command can be stopped, and the only place it can be tested without Minecraft running.
  * A string this module returns is asserted against a table; whether the game *accepts* that
  * string is a separate question that only a live session can answer, and the corpus written
- * by the test exists to be replayed at one (see design/live-verification-plan.md).
+ * by the test exists to be replayed at one (see tools/live-probe/).
  *
  * Grammar, from minecraft.wiki's Bedrock sections:
  *

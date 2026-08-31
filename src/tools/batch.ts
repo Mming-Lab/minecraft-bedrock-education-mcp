@@ -59,9 +59,9 @@
  *
  * The branches here are not written out a second time. They are the single tools' own schemas
  * and the dispatch calls the single tools' own handlers, so there is no second ledger to drift
- * out of step with the first. `design/tool-surface-audit.md` measured what a second ledger
- * costs: eight cross-tool references in the legacy `sequence` tool, of which eight did not
- * exist.
+ * out of step with the first. The audit of the legacy tool surface measured what a second
+ * ledger costs: eight cross-tool references in the legacy `sequence` tool, of which eight did
+ * not exist.
  */
 
 import { z } from 'zod';

@@ -75,8 +75,12 @@ claude_desktop_config.json
 CLAUDE.md
 .claude/
 
+# Design notes (development only). Working notes from the analysis behind the rewrite:
+# useful to whoever is changing this code, noise to whoever is using it.
+design/
+
 # Documentation (development only)
 doc/
 
 # Copies of dist that live-probe rigs import, to dodge the ESM module cache.
-packages/server/.rig-cache/
+.rig-cache/

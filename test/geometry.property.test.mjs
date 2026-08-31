@@ -1,7 +1,7 @@
 // Property tests for the geometry.
 //
 // The goldens pin specific shapes to specific outputs. That catches a change, but only where
-// a case exists — every bug recorded in design/golden-extraction-result.md was found at some
+// a case exists — every bug the golden extraction recorded was found at some
 // radius nobody had thought to try. A fractional radius, an odd height, a waist of zero:
 // each was a hole in the parameter space rather than a mistake in a formula.
 //

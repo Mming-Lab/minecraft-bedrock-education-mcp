@@ -20,8 +20,8 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
-import { Client } from '../../packages/server/node_modules/@modelcontextprotocol/client/dist/index.mjs';
-import { StdioClientTransport } from '../../packages/server/node_modules/@modelcontextprotocol/client/dist/stdio.mjs';
+import { Client } from '../../node_modules/@modelcontextprotocol/client/dist/index.mjs';
+import { StdioClientTransport } from '../../node_modules/@modelcontextprotocol/client/dist/stdio.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const SERVER = path.join(HERE, '..', '..', 'packages', 'server', 'dist', 'index.js');
@@ -53,7 +53,7 @@ const triggerStamp = () => {
 
 if (!fs.existsSync(SERVER)) {
   console.error(`The server is not built: ${SERVER}`);
-  console.error('Run `npm run build` in packages/server first.');
+  console.error('Run `npm run build` first.');
   process.exit(1);
 }
 

@@ -128,7 +128,7 @@ await test('fewer than two shapes is refused at the schema, not in the handler',
 
 await test('every shape tool has a branch, so none can be reached only one at a time', () => {
   // Built from buildTools rather than written out, which is what stops the branch list drifting
-  // from the tool list. design/tool-surface-audit.md measured what a second ledger costs: the
+  // from the tool list. The legacy tool-surface audit measured what a second ledger costs: the
   // legacy sequence tool advertised eight cross-tool actions and eight of them did not exist.
   const shapes = toolsFor(offlineBridge, fakeRunner())
     .filter((t) => t.name.startsWith('build.') && t.inputSchema.dryRun && t.name !== 'build.batch')

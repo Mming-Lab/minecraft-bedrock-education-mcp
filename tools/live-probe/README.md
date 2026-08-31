@@ -11,7 +11,7 @@ is 32768.
 ## Running it
 
 ```bash
-node probe.mjs --rig a1-core
+node probe.mjs --rig d1-bridge
 ```
 
 Then, in the game's chat:
@@ -54,8 +54,17 @@ a wrong reading can be corrected later without another session.
 
 | rig | what it settles |
 |---|---|
-| `a0-connect` | that the pipe works and what a reply looks like. Changes nothing. |
-| `a1-core` | the command list, `~` resolution, `testforblock`, `gettopsolidblock`, `getchunkdata` syntax, the generated command corpus, the fill volume limit. Places blocks near the player. |
+| `a4-focus` | a dispatcher, not a measurement. The runner picks a rig when the connection opens and cannot be told afterwards, so this one is loaded under a fixed name and hands off to whatever `active-rig.txt` names. |
+| `focus-then-battery` | proves what a silent connection was, then runs the battery against the world it just proved. |
+| `d1-bridge` | the bridge client against the real game, rather than against the fake add-on the unit tests use. |
+| `d2-channel` | which channel the add-on actually speaks on, and where exactly a line dies. |
+| `d3-layers` | the real MCP tools against the real world — what a model would actually see. |
+| `d4-roundtrip` | build something, read it back, check it is the thing that was asked for. |
+| `d5-edit` | read a layer grid, change three characters, send it back. |
+| `d6-longnames` | whether the `read_region` retry fires, and whether 16 cubed comes back whole. |
+
+`_battery.mjs` is not a rig. It holds the measurements themselves so more than one rig can run
+them.
 
 A rig is a module in `rigs/` exporting `run(session, { log, dump })`. `session.command()`
 resolves with the reply frame - including a refusal, because a refusal is data here and most

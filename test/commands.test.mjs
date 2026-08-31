@@ -266,7 +266,7 @@ fs.writeFileSync(
   JSON.stringify(
     {
       purpose:
-        'Every command string the table produces. Unverified against a live server: replay these at a session to find out which the game actually accepts (design/live-verification-plan.md).',
+        'Every command string the table produces. Unverified against a live server: replay these at a session to find out which the game actually accepts (tools/live-probe/).',
       commands: [...new Set(corpus.map((c) => c.command))].sort(),
     },
     null,

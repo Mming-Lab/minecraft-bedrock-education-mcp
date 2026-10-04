@@ -39,11 +39,11 @@ const HERE = path.dirname(fileURLToPath(import.meta.url));
  * failed differently for exactly that reason.
  *
  * So the whole tree is copied somewhere new and imported from there, which gives every module
- * in it an unused URL. The copy sits under `packages/server` so that `zod` still resolves
- * through the package's own `node_modules`.
+ * in it an unused URL. The copy sits inside the package rather than under the system temp
+ * directory so that `zod` still resolves through the package's own `node_modules`.
  */
 async function serverModules() {
-  const server = path.join(HERE, '..', '..', '..', 'packages', 'server');
+  const server = path.join(HERE, '..', '..', '..');
   const cache = path.join(server, '.rig-cache');
   // Previous copies are of no use to anyone: the point is to be new.
   fs.rmSync(cache, { recursive: true, force: true });

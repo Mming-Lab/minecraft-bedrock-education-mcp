@@ -24,7 +24,7 @@ import { Client } from '../../node_modules/@modelcontextprotocol/client/dist/ind
 import { StdioClientTransport } from '../../node_modules/@modelcontextprotocol/client/dist/stdio.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
-const SERVER = path.join(HERE, '..', '..', 'packages', 'server', 'dist', 'index.js');
+const SERVER = path.join(HERE, '..', '..', 'dist', 'index.js');
 
 const args = new Map();
 for (let i = 2; i < process.argv.length; i += 2) {

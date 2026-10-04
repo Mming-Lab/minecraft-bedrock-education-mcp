@@ -25,11 +25,11 @@ const HERE = path.dirname(fileURLToPath(import.meta.url));
  *
  * The runner outlives rebuilds and caches every module a rig imports. A `?t=` query only
  * makes the named module new - its own imports come back out of the cache - so the tree is
- * copied somewhere unused and imported from there. Under `packages/server`, so `zod` still
+ * copied somewhere unused and imported from there. Inside the package, so `zod` still
  * resolves. See d4-roundtrip, where two live runs were lost to this.
  */
 async function serverModules() {
-  const server = path.join(HERE, '..', '..', '..', 'packages', 'server');
+  const server = path.join(HERE, '..', '..', '..');
   const cache = path.join(server, '.rig-cache');
   fs.rmSync(cache, { recursive: true, force: true });
   const to = path.join(cache, String(Date.now()));

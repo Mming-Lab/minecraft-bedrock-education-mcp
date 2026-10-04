@@ -26,8 +26,8 @@
 // testing it - it has its own tests against a fake game - but because the runner owns the
 // only live connection, and taking it over would cost a reconnect, which only a human can do.
 
-import { BridgeClient } from '../../../packages/server/dist/bridge/client.js';
-import { itemsPerLine, MAX_LINE, parseLine } from '../../../packages/server/dist/bridge/protocol.js';
+import { BridgeClient } from '../../../dist/bridge/client.js';
+import { itemsPerLine, MAX_LINE, parseLine } from '../../../dist/bridge/protocol.js';
 
 /**
  * A BridgeTransport backed by the runner's session.

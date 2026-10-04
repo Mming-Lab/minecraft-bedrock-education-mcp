@@ -17,8 +17,8 @@
 import fs from 'node:fs';
 import path from 'node:path';
 
-import { BridgeClient } from '../../../packages/server/dist/bridge/client.js';
-import { toolsFor } from '../../../packages/server/dist/tools/index.js';
+import { BridgeClient } from '../../../dist/bridge/client.js';
+import { toolsFor } from '../../../dist/tools/index.js';
 
 /** Same adapter as d1: the runner owns the socket, so chat is read from its event array. */
 function transportOver(session, seen) {

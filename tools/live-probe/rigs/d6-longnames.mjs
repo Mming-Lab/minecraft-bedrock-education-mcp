@@ -27,7 +27,7 @@ const HERE = path.dirname(fileURLToPath(import.meta.url));
 
 /** See d4-roundtrip: the runner caches modules across rebuilds, and `?t=` does not reach imports. */
 async function serverModules() {
-  const server = path.join(HERE, '..', '..', '..', 'packages', 'server');
+  const server = path.join(HERE, '..', '..', '..');
   const cache = path.join(server, '.rig-cache');
   fs.rmSync(cache, { recursive: true, force: true });
   const to = path.join(cache, String(Date.now()));

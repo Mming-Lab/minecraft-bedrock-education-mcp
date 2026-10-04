@@ -286,6 +286,10 @@ await test('with nothing connected, every world tool says how to connect', async
       center: { x: 0, y: 64, z: 0 },
       corner1: { x: 0, y: 64, z: 0 },
       corner2: { x: 1, y: 64, z: 1 },
+      // For world.run_command, which is the one world tool that takes a line rather than a
+      // place. The handlers are called directly here, so nothing has filled in the schema's
+      // required arguments the way the SDK would.
+      command: 'time set noon',
     };
     await assert.rejects(async () => tool.handler(args), /\/connect localhost:19131/, tool.name);
   }

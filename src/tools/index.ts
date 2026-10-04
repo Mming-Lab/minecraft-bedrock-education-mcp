@@ -9,6 +9,7 @@ export * from './area.js';
 export * from './plan.js';
 export * from './rotate.js';
 export * from './batch.js';
+export * from './command.js';
 
 import { buildTools } from './build.js';
 import { offlineBridge, worldTools, type WorldBridge } from './world.js';
@@ -20,6 +21,7 @@ import { areaTools } from './area.js';
 import { planTools } from './plan.js';
 import { rotateTools } from './rotate.js';
 import { batchTools } from './batch.js';
+import { commandTools } from './command.js';
 import {
   BlockStates,
   BuildOutcome,
@@ -133,6 +135,11 @@ export function toolsFor(bridge: WorldBridge, runner: CommandRunner = offlineRun
     // makes tools/list cacheable, and the surface test enforces it - I had put these last
     // because they change the world, which is a reason for the annotation, not for the order.
     ...areaTools(runner),
+    // Last of the world.* group, and last for a reason rather than only for the prefix: it is
+    // the escape hatch, and a model reads the list in order. Everything that knows what it is
+    // doing comes first, so the general one is what is left over rather than what is reached
+    // for.
+    ...commandTools(runner),
     // After the reading tools, because measuring is what you do with a region once you can
     // read one.
     ...assessTools(bridge),

@@ -55,6 +55,7 @@ export const buildLayersTool = (runner: CommandRunner) =>
       'The intended loop is read, change, send back: world.read_region a region, change the characters you want changed, and pass the result here unmodified. Its palette and layers go straight in.',
       '"." is air and will clear what is there. "?" means leave that position completely alone — so a region that was partly unread can be written back safely, and so a small change does not have to describe the whole area.',
       'A block given as a plain string is placed in its default state; give it as an object with states to choose which way it faces.',
+      'Blocks that hang on something — ladders, torches, buttons, signs, rails, carpets — are sent after the rest of the grid, so a torch on a wall in the same grid stays up.',
       'This matters when writing back something you read: world.read_region returns ids only, so a grid that came from a read carries no facings. Send it back whole and every stair straightens and every door shuts. Use "?" for the positions you are not changing — those are never rewritten, so they keep everything they had.',
       'Do NOT use this for spheres, cylinders, cones, tori or helices — build.sphere and the other shape tools compute those exactly, and a hand-sliced curve comes out lumpy.',
       'Do NOT use it for large plain volumes either: build.cube fills a box with two corners rather than thousands of characters.',

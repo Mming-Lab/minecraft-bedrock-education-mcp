@@ -262,5 +262,24 @@ await test('the naming is capped and the count is not', async () => {
   assert.equal(result.overwritten.length, MAX_OVERWRITTEN_LISTED);
 });
 
+await test('a ladder entry is sent after the wall it hangs on, whatever order it was written in', async () => {
+  // The reported bug. The ladders are entry 0 and the wall is entry 1, so entry order alone
+  // would send the ladders first - and grouping by block means entry order is not what decides
+  // the sending anyway. What has to hold is that the wall is answered for first.
+  resetPlans();
+  const runner = fakeRunner();
+  await tool(runner).handler({
+    shapes: [
+      { type: 'cube', corner1: P(0, 64, 1), corner2: P(4, 67, 1), block: 'ladder' },
+      { type: 'cube', corner1: P(0, 64, 0), corner2: P(4, 67, 0), block: 'stone' },
+    ],
+  });
+
+  const lastWall = runner.sent.findLastIndex((c) => c.includes('stone'));
+  const firstLadder = runner.sent.findIndex((c) => c.includes('ladder'));
+  assert.ok(lastWall >= 0 && firstLadder >= 0, `both should have been sent: ${runner.sent}`);
+  assert.ok(firstLadder > lastWall, `ladder went out first: ${JSON.stringify(runner.sent)}`);
+});
+
 console.log(`\n${passed} passed, ${failed} failed`);
 process.exit(failed === 0 ? 0 : 1);

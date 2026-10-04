@@ -33,7 +33,7 @@
  */
 
 import type { CommandOutcome, CommandRunner } from '../bridge/index.js';
-import { buildFillCommand, optimizeToBoxes, type BlockSpec, type Box } from '../commands/index.js';
+import { buildFillCommand, needsSupport, optimizeToBoxes, type BlockSpec, type Box } from '../commands/index.js';
 import type { Position } from '../geometry/index.js';
 
 /** How many commands may be in flight. Below the 100 that was measured to be safe. */
@@ -60,8 +60,9 @@ export interface PlacementReport {
 /**
  * Runs commands with a cap on how many are in flight at once.
  *
- * Deliberately not `Promise.all` over the whole list. Order does not matter - the fills cover
- * disjoint boxes - but the count does.
+ * Deliberately not `Promise.all` over the whole list: the count matters even where the order
+ * does not. Within one call of this, order does not - see {@link placeGroups} for the one
+ * ordering that does, which is enforced by calling this twice rather than by sequencing here.
  */
 async function runAll(
   runner: CommandRunner,
@@ -124,18 +125,8 @@ export interface BlockGroup {
   readonly positions: readonly Position[];
 }
 
-/**
- * Places several blocks at once.
- *
- * The commands are collected across every group before any are sent, so the cap on commands
- * in flight applies to the whole build rather than to each block in turn. A layer grid with
- * twelve kinds of block would otherwise send twelve small batches one after another, and the
- * round trips, not the commands, are what the time goes on.
- */
-export async function placeGroups(
-  runner: CommandRunner,
-  groups: readonly BlockGroup[]
-): Promise<PlacementReport> {
+/** The fills one set of groups becomes, ready to send as a single wave. */
+function waveFor(groups: readonly BlockGroup[]): { commands: string[]; blockCount: number } {
   const commands: string[] = [];
   let blockCount = 0;
   for (const group of groups) {
@@ -144,8 +135,54 @@ export async function placeGroups(
     commands.push(...packed.commands);
     blockCount += packed.blockCount;
   }
+  return { commands, blockCount };
+}
 
-  const results = await runAll(runner, commands);
+/**
+ * Places several blocks at once.
+ *
+ * The commands are collected across every group before any are sent, so the cap on commands
+ * in flight applies to the whole build rather than to each block in turn. A layer grid with
+ * twelve kinds of block would otherwise send twelve small batches one after another, and the
+ * round trips, not the commands, are what the time goes on.
+ *
+ * ## Except that what hangs on something goes last
+ *
+ * Grouping is by block, and the sending is concurrent, so a wall and the ladders on it used to
+ * race. Whichever won, the fills both reported success - the ladder was written, and then the
+ * wall arriving behind it knocked it off. Nothing in the result could notice, because from
+ * here the position was filled.
+ *
+ * So the groups go out in two waves: everything that holds something up, and then everything
+ * that hangs on it. Two waves rather than one group at a time, because the cost here is round
+ * trips and a per-group sequence would pay twelve of them to fix a problem that needs one.
+ * See `commands/attachment.ts` for which blocks wait, and why that list leans toward leaving a
+ * block out.
+ *
+ * Overlaps are already resolved before anything reaches here - each position belongs to exactly
+ * one group - so reordering the waves cannot change which block ends up where.
+ */
+export async function placeGroups(
+  runner: CommandRunner,
+  groups: readonly BlockGroup[]
+): Promise<PlacementReport> {
+  const supporting: BlockGroup[] = [];
+  const hanging: BlockGroup[] = [];
+  for (const group of groups) {
+    (needsSupport(group.block) ? hanging : supporting).push(group);
+  }
+
+  const first = waveFor(supporting);
+  // Awaited before the second wave is built, which is the whole point: the game has answered
+  // for every supporting fill before a single ladder is sent.
+  const firstResults = await runAll(runner, first.commands);
+
+  const second = waveFor(hanging);
+  const secondResults = await runAll(runner, second.commands);
+
+  const commands = [...first.commands, ...second.commands];
+  const results = [...firstResults, ...secondResults];
+  const blockCount = first.blockCount + second.blockCount;
 
   const unsent: { commandLine: string; reason: string }[] = [];
   const negative: { commandLine: string; statusMessage: string }[] = [];

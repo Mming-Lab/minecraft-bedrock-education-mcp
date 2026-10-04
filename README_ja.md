@@ -16,7 +16,7 @@ AIが Minecraft Education で建築する MCP サーバです。**建てる前�
 - **Minecraft Education 1.26 以降**、この MCP サーバと**同じPC**に。
   ゲームがサーバに接続する向きなので、同居している必要があります
 - **Node 22 以降**
-- アドオン導入スクリプトは Windows 前提です（サーバ本体はOSを選びません）
+- 下記のパスは Windows 前提です（サーバ本体はOSを選びません）
 
 Bedrock 版でも建築はできます。**読み取りにはアドオンが要り**、アドオンには Script API が要ります。
 
@@ -24,8 +24,10 @@ Bedrock 版でも建築はできます。**読み取りにはアドオンが要�
 
 ### 1. アドオンを入れる
 
-```bash
-node addon/install.mjs
+`addon/` を `mcp-bridge` という名前でゲームのパックフォルダへコピーします。既にあれば置き換えてください。
+
+```
+%LOCALAPPDATA%\Packages\Microsoft.MinecraftEducationEdition_8wekyb3d8bbwe\LocalState\games\com.mojang\development_behavior_packs\
 ```
 
 そのあとワールドで **MCP Bridge** を有効にして、**Minecraft Education を完全に終了して開き直して

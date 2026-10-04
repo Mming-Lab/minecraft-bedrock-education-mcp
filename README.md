@@ -17,7 +17,7 @@ it, put all of it down in one call, and read back what actually landed.
   connects to the server, not the other way round, and the tools that read the world go
   through an add-on running inside it.
 - **Node 22 or later.**
-- Windows, for the add-on installer. The server itself has no platform requirement.
+- Windows, if you want the paths below to match. The server itself has no platform requirement.
 
 Bedrock Edition works for building. Reading needs the add-on, which needs the Script API.
 
@@ -27,8 +27,10 @@ Three steps, in this order. The middle one is the one people skip.
 
 ### 1. Install the add-on
 
-```bash
-node addon/install.mjs
+Copy `addon/` into the game's pack folder as `mcp-bridge`, replacing any copy already there:
+
+```
+%LOCALAPPDATA%\Packages\Microsoft.MinecraftEducationEdition_8wekyb3d8bbwe\LocalState\games\com.mojang\development_behavior_packs\
 ```
 
 Then activate **MCP Bridge** on the world, and **close Minecraft Education completely and open

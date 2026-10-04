@@ -24,7 +24,7 @@ import {
   MalformedRecordError,
   structureIndex,
   subChunkIndex,
-} from '../dist/world/index.js';
+} from '../tools/world-records/dist/records.js';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const fixtures = JSON.parse(fs.readFileSync(path.join(HERE, 'fixtures', 'world-records.json'), 'utf8'));

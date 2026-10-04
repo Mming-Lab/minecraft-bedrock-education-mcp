@@ -28,7 +28,7 @@ someone has to launch the game and type `/connect`.
 | `src/bridge/protocol.ts` | The wire format to the add-on: splitting, reassembly, loss detection |
 | `src/bridge/transport.ts` | The socket, over socket-be |
 | `src/world/layers.ts` | Region to layer grid |
-| `src/world/records.ts` | Decoders for the world database (subchunks, structures) |
+| `tools/world-records/` | Decoders for the world database (subchunks, structures). Not part of the server — see its README |
 | `addon/` | The behaviour pack that runs inside the game, shipped with the package |
 | `src/tools/` | A tool is data, not a subclass |
 | `src/server.ts` | The only file that knows the MCP SDK exists |

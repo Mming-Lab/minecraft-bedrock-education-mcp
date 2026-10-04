@@ -53,10 +53,11 @@
   "scripts": {
     "prepack": "npm run build",
     "build": "tsc -p .",
-    "test": "npm run build && node test/golden-integrity.test.mjs && node test/tools.test.mjs && node test/commands.test.mjs && node test/optimize.test.mjs && node test/placer.test.mjs && node test/attachment.test.mjs && node test/build-layers.test.mjs && node test/batch.test.mjs && node test/rotate.test.mjs && node test/plan.test.mjs && node test/prism.test.mjs && node test/clone.test.mjs && node test/assess.test.mjs && node test/area.test.mjs && node test/world.test.mjs && node test/world-tools.test.mjs && node test/players.test.mjs && node test/command.test.mjs && node test/bridge.test.mjs && node test/transport.test.mjs && node test/geometry.property.test.mjs && node test/server.test.mjs",
+    "build:world-records": "node -e \"require('node:fs').rmSync('tools/world-records/dist',{recursive:true,force:true})\" && tsc -p tools/world-records",
+    "test": "npm run build && node test/golden-integrity.test.mjs && node test/tools.test.mjs && node test/commands.test.mjs && node test/optimize.test.mjs && node test/placer.test.mjs && node test/attachment.test.mjs && node test/build-layers.test.mjs && node test/batch.test.mjs && node test/rotate.test.mjs && node test/plan.test.mjs && node test/prism.test.mjs && node test/clone.test.mjs && node test/assess.test.mjs && node test/area.test.mjs && npm run build:world-records && node test/world.test.mjs && node test/world-tools.test.mjs && node test/players.test.mjs && node test/command.test.mjs && node test/bridge.test.mjs && node test/transport.test.mjs && node test/geometry.property.test.mjs && node test/server.test.mjs",
     "test:golden": "node ./test/golden-validate.mjs --geometry ./test/golden-adapter.mjs --math ./test/golden-adapter.mjs --optimizer ./dist/commands/optimize.js",
     "start": "node dist/index.js",
-    "install-addon": "node addon/install.mjs",
-    "verify": "npm test && npm run test:golden"
+    "verify": "npm test && npm run test:golden",
+    "install-addon": "node addon/install.mjs"
   }
 }
